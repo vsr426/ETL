@@ -1,0 +1,120 @@
+ sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table orders --target-dir /user/cloudera/problem5/text --as-textfile --lines-terminated-by '\n' --fields-terminated-by '\t' --outdir javafiles
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table orders --target-dir /user/cloudera/problem5/avro --as-avrodatafile  --outdir javafiles
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table orders --target-dir /user/cloudera/problem5/parquet --as-parquetfile  --outdir javafiles
+
+ ssc = SQLContext(sc)
+
+ssc.setConf("spark.sql.shuffle.partitions","10")
+ssc.read.format("com.databricks.spark.avro").load(//user/cloudera/problem5/avro")
+avroorders = ssc.read.format("com.databricks.spark.avro").load("/user/cloudera/problem5/avro")
+ ssc.setConf("spark.sql.parquet.compression.codec","snappy")
+avroorders.write.parquet("/user/cloudera/problem5/parquet-snappy-compress")
+textorders = sc.textFile("/user/cloudera/problem5/text")
+ textorders.saveAsTextFile("/user/cloudera/problem5/text-gzip-compress", compressionCodecClass="org.apache.hadoop.io.compress.GzipCodec")
+ ssc.setConf("spark.sql.parquet.compression.codec","gzip")
+ avroorders.write.parquet("/user/cloudera/problem5/parquet-gzip-compress")
+
+ >>> avroorders = ssc.read.format("com.databricks.spark.avro").load("/user/cloudera/problem5/avro")
+>>> ordertuple = avroorders.map(lambda x : (None, x))
+>>> ordertuple.take(2)
+[(None, Row(order_id=1, order_date=1374735600000, order_customer_id=11599, order_status=u'CLOSED')), (None, Row(order_id=2, order_date=1374735600000, order_customer_id=256, order_status=u'PENDING_PAYMENT'))]
+
+Error: Row Type values are not allowed in Sequence files, so converted to tuple type
+>>> ordertuple = avroorders.map(lambda x : (None, (x[0],x[1],x[2],x[3])))
+>>> ordertuple.saveAsSequenceFile("/user/cloudera/problem5/sequence")
+ 
+[cloudera@quickstart ~]$ hadoop fs -ls /user/cloudera/problem5/sequence
+Found 5 items
+-rw-r--r--   1 cloudera cloudera          0 2017-07-15 16:39 /user/cloudera/problem5/sequence/_SUCCESS
+-rw-r--r--   1 cloudera cloudera     671515 2017-07-15 16:39 /user/cloudera/problem5/sequence/part-00000
+-rw-r--r--   1 cloudera cloudera     671776 2017-07-15 16:39 /user/cloudera/problem5/sequence/part-00001
+-rw-r--r--   1 cloudera cloudera     670969 2017-07-15 16:39 /user/cloudera/problem5/sequence/part-00002
+-rw-r--r--   1 cloudera cloudera     671611 2017-07-15 16:39 /user/cloudera/problem5/sequence/part-00003
+
+
+
+>>> avroorders.map(lambda x : x).saveAsTextFile("/user/cloudera/problem5/text-snappy-compress", compressionCodecClass = "org.apache.hadoop.io.compress.SnappyCodec")
+>>> ordertuple.saveAsSequenceFile("/user/cloudera/problem5/sequenceSnappy", compressionCodecClass="org.apache.hadoop.io.compress.SnappyCodec")                          
+>>> ordertuple.saveAsSequenceFile("user/cloudera/problem5/sequenceGzip", compressionCodecClass="org.apache.hadoop.io.compress.GzipCodec")
+
+
+>>> parquetorders=ssc.read.parquet("/user/cloudera/problem5/parquet-snappy-compress")
+>>> ssc.setConf("spark.sql.parquet.compression.codec","uncompressed")
+
+>>> parquetorders.write.parquet("/user/cloudera/problem5/parquet-no-compress")
+hadoop fs -ls /user/cloudera/problem5/parquet-no-compress
+-rw-r--r--   1 cloudera cloudera          0 2017-07-15 18:27 /user/cloudera/problem5/parquet-no-compress/_SUCCESS
+-rw-r--r--   1 cloudera cloudera        529 2017-07-15 18:27 /user/cloudera/problem5/parquet-no-compress/_common_metadata
+-rw-r--r--   1 cloudera cloudera       2591 2017-07-15 18:27 /user/cloudera/problem5/parquet-no-compress/_metadata
+-rw-r--r--   1 cloudera cloudera     147325 2017-07-15 18:27 /user/cloudera/problem5/parquet-no-compress/part-r-00000-dcd4fb83-e44f-4c5d-b2e4-5f2a9c708984.parquet
+-rw-r--r--   1 cloudera cloudera     147256 2017-07-15 18:27 /user/cloudera/problem5/parquet-no-compress/part-r-00001-dcd4fb83-e44f-4c5d-b2e4-5f2a9c708984.parquet
+-rw-r--r--   1 cloudera cloudera     147440 2017-07-15 18:27 /user/cloudera/problem5/parquet-no-compress/part-r-00002-dcd4fb83-e44f-4c5d-b2e4-5f2a9c708984.parquet
+-rw-r--r--   1 cloudera cloudera     152265 2017-07-15 18:27 /user/cloudera/problem5/parquet-no-compress/part-r-00003-dcd4fb83-e44f-4c5d-b2e4-5f2a9c708984.parquet
+
+
+
+
+>>> ssc.setConf("spark.sql.avro.compression.codec","snappy")
+>>> parquetorders.write.format("com.databricks.spark.avro").save("/user/cloudera/problem5/avro-snappy")
+hadoop fs -ls /user/cloudera/problem5/avro-snappy
+Found 5 items
+-rw-r--r--   1 cloudera cloudera          0 2017-07-15 18:31 /user/cloudera/problem5/avro-snappy/_SUCCESS
+-rw-r--r--   1 cloudera cloudera     163861 2017-07-15 18:31 /user/cloudera/problem5/avro-snappy/part-r-00000-dd0e7b6b-2442-4853-8bc4-a2a442ddc47d.avro
+-rw-r--r--   1 cloudera cloudera     163901 2017-07-15 18:31 /user/cloudera/problem5/avro-snappy/part-r-00001-dd0e7b6b-2442-4853-8bc4-a2a442ddc47d.avro
+-rw-r--r--   1 cloudera cloudera     164185 2017-07-15 18:31 /user/cloudera/problem5/avro-snappy/part-r-00002-dd0e7b6b-2442-4853-8bc4-a2a442ddc47d.avro
+-rw-r--r--   1 cloudera cloudera     169172 2017-07-15 18:31 /user/cloudera/problem5/avro-snappy/part-r-00003-dd0e7b6b-2442-4853-8bc4-a2a442ddc47d.avro
+
+
+
+>>> avrosnappyorders = ssc.read.format("com.databricks.spark.avro").load("/user/cloudera/problem5/avro-snappy")
+>>> avrosnappyorders.toJSON().saveAsTextFile("/user/cloudera/problem5/json-no-compress")
+[cloudera@quickstart native]$ hadoop fs -ls /user/cloudera/problem5/json-no-compress
+Found 5 items
+-rw-r--r--   1 cloudera cloudera          0 2017-07-15 19:36 /user/cloudera/problem5/json-no-compress/_SUCCESS
+-rw-r--r--   1 cloudera cloudera    1688769 2017-07-15 19:36 /user/cloudera/problem5/json-no-compress/part-00000
+-rw-r--r--   1 cloudera cloudera    1700177 2017-07-15 19:36 /user/cloudera/problem5/json-no-compress/part-00001
+-rw-r--r--   1 cloudera cloudera    1699468 2017-07-15 19:36 /user/cloudera/problem5/json-no-compress/part-00002
+-rw-r--r--   1 cloudera cloudera    1700095 2017-07-15 19:36 /user/cloudera/problem5/json-no-compress/part-00003
+
+>>> avrosnappyorders.toJSON().saveAsTextFile("/user/cloudera/problem5/json-gzip", compressionCodecClass="org.apache.hadoop.io.compress.GzipCodec")
+[cloudera@quickstart native]$ hadoop fs -ls /user/cloudera/problem5/json-gzip
+Found 5 items
+-rw-r--r--   1 cloudera cloudera          0 2017-07-15 19:38 /user/cloudera/problem5/json-gzip/_SUCCESS
+-rw-r--r--   1 cloudera cloudera     141791 2017-07-15 19:38 /user/cloudera/problem5/json-gzip/part-00000.gz
+-rw-r--r--   1 cloudera cloudera     141474 2017-07-15 19:38 /user/cloudera/problem5/json-gzip/part-00001.gz
+-rw-r--r--   1 cloudera cloudera     142072 2017-07-15 19:38 /user/cloudera/problem5/json-gzip/part-00002.gz
+-rw-r--r--   1 cloudera cloudera     151467 2017-07-15 19:38 /user/cloudera/problem5/json-gzip/part-00003.gz
+
+
+>>> jsonorders=ssc.read.json("/user/cloudera/problem5/json-gzip")
+>>> jsonorders.map(lambda x : str(x[0])+','+ str(x[1])+','+str(x[2])+','+str(x[3])).saveAsTextFile("/user/cloudera/problem5/csv-gzip", compressionCodecClass="org.apache.hadoop.io.compress.GzipCodec")
+[cloudera@quickstart native]$ hadoop fs -ls /user/cloudera/problem5/csv-gzip
+Found 5 items
+-rw-r--r--   1 cloudera cloudera          0 2017-07-15 19:46 /user/cloudera/problem5/csv-gzip/_SUCCESS
+-rw-r--r--   1 cloudera cloudera     107252 2017-07-15 19:46 /user/cloudera/problem5/csv-gzip/part-00000.gz
+-rw-r--r--   1 cloudera cloudera     106603 2017-07-15 19:46 /user/cloudera/problem5/csv-gzip/part-00001.gz
+-rw-r--r--   1 cloudera cloudera     106926 2017-07-15 19:46 /user/cloudera/problem5/csv-gzip/part-00002.gz
+-rw-r--r--   1 cloudera cloudera     111686 2017-07-15 19:46 /user/cloudera/problem5/csv-gzip/part-00003.gz
+[cloudera@quickstart native]$
+
+>>> sequenceorders = sc.sequenceFile("/user/cloudera/problem5/sequence",keyClass="org.apache.hadoop.io.Text", valueClass="org.apache.hadoop.io.Text")
+>>> hc = HiveContext(sc)
+>>> rdd1 = sequenceorders.map(lambda x: x[1].split("\t"))
+>>> df = hc.createDataFrame(rdd1)
+>>> df.write.orc("/user/cloudera/problem5/orc")
+[cloudera@quickstart ~]$ hadoop fs -ls /user/cloudera/problem5/orc
+Found 5 items
+-rw-r--r--   1 cloudera cloudera          0 2017-07-16 16:49 /user/cloudera/problem5/orc/_SUCCESS
+-rw-r--r--   1 cloudera cloudera      90861 2017-07-16 16:49 /user/cloudera/problem5/orc/part-r-00000-cb0d8f03-af21-4c20-8a76-249a92aed0f3.orc
+-rw-r--r--   1 cloudera cloudera      88152 2017-07-16 16:49 /user/cloudera/problem5/orc/part-r-00001-cb0d8f03-af21-4c20-8a76-249a92aed0f3.orc
+-rw-r--r--   1 cloudera cloudera      88453 2017-07-16 16:49 /user/cloudera/problem5/orc/part-r-00002-cb0d8f03-af21-4c20-8a76-249a92aed0f3.orc
+-rw-r--r--   1 cloudera cloudera      91117 2017-07-16 16:49 /user/cloudera/problem5/orc/part-r-00003-cb0d8f03-af21-4c20-8a76-249a92aed0f3.orc
+
+
+>>> orcorders = hc.read.orc("/user/cloudera/problem5/orc")
+for i in orcorders.take(5): print(i)
+Row(_1=u'1', _2=u'1374735600000', _3=u'11599', _4=u'CLOSED')
+Row(_1=u'2', _2=u'1374735600000', _3=u'256', _4=u'PENDING_PAYMENT')
+Row(_1=u'3', _2=u'1374735600000', _3=u'12111', _4=u'COMPLETE')
+Row(_1=u'4', _2=u'1374735600000', _3=u'8827', _4=u'CLOSED')
+Row(_1=u'5', _2=u'1374735600000', _3=u'11318', _4=u'COMPLETE')

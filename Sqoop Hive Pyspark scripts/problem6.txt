@@ -1,0 +1,127 @@
+Problem 6: Provide two solutions for steps 2 to 7
+Using HIVE QL over Hive Context
+Using Spark SQL over Spark SQL Context or by using RDDs
+create a hive meta store database named problem6 and import all tables from mysql retail_db database into hive meta store. 
+On spark shell use data available on meta store as source and perform step 3,4,5 and 6. [this proves your ability to use meta store as a source]  
+Rank products within department by price and order by department ascending and rank descending [this proves you can produce ranked and sorted data on joined data sets]
+find top 10 customers with most unique product purchases. if more than one customer has the same number of product purchases then the customer with the lowest customer_id will take precedence [this proves you can produce aggregate statistics on joined datasets]
+On dataset from step 3, apply filter such that only products less than 100 are extracted [this proves you can use subqueries and also filter data]
+On dataset from step 4, extract details of products purchased by top 10 customers which are priced at less than 100 USD per unit [this proves you can use subqueries and also filter data]
+Store the result of 5 and 6 in new meta store tables within hive. [this proves your ability to use metastore as a sink]
+
+sqoop import-all-tables --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --null-string '\\N' --null-non-string '\\N' --hive-import --create-hive-table --hive-database problem6 --outdir javafiles
+
+>>> hc = HiveContext(sc)
+
+>>> rankProducts = hc.sql("select p.product_id, p.product_category_id, d.department_id,p.product_price, rank() over (partition by d.department_id order by p.product_price), dense_rank() over (partition by d.department_id order by p.product_price) from products p join categories c on p.product_category_id = c.category_id join departments d on c.category_department_id = d.department_id")
+
+
+>>> top10customers = hc.sql("select customer_id, count( distinct order_item_order_id) cnt from customers c join orders o on c.customer_id = o.order_customer_id join order_items oi on o.order_id = oi.order_item_order_id group by c.customer_id order by cnt desc, customer_id asc limit 10")
+
+>>> top10customers.show()
++-----------+---+
+|customer_id|cnt|
++-----------+---+
+|       5654| 15|
+|       3710| 14|
+|       5283| 14|
+|      10591| 14|
+|      12284| 14|
+|      12431| 14|
+|        221| 13|
+|        569| 13|
+|        791| 13|
+|       1443| 13|
++-----------+---+
+
+ top10customers = hc.sql(" select c1.* from customers c1 join (select customer_id, count( distinct order_item_order_id) cnt from customers c join orders o on c.customer_id = o.order_customer_id join order_items oi on o.order_id = oi.order_item_order_id group by c.customer_id order by cnt desc, customer_id asc limit 10) c2 on c1.customer_id = c2.customer_id")
++-----------+--------------+--------------+--------------+-----------------+--------------------+-------------+--------------+----------------+
+|customer_id|customer_fname|customer_lname|customer_email|customer_password|     customer_street|customer_city|customer_state|customer_zipcode|
++-----------+--------------+--------------+--------------+-----------------+--------------------+-------------+--------------+----------------+
+|        221|          Mary|           Cox|     XXXXXXXXX|        XXXXXXXXX|7463 Clear Branch...|     Columbus|            OH|           43230|
+|        569|          Mary|          Frye|     XXXXXXXXX|        XXXXXXXXX|   4834 Easy Terrace|     Meridian|            ID|           83642|
+|        791|          Mary|         Smith|     XXXXXXXXX|        XXXXXXXXX|     6950 Honey Line|       Canton|            MI|           48187|
+|       1443|        Denise|         Cohen|     XXXXXXXXX|        XXXXXXXXX|8361 Misty Subdiv...|  West Orange|            NJ|           07052|
+|       3710|        Ashley|         Smith|     XXXXXXXXX|        XXXXXXXXX|   1564 Gentle Jetty|  Springfield|            MO|           65807|
+|       5283|         Jacob|      Guerrero|     XXXXXXXXX|        XXXXXXXXX|  3309 Grand Circuit|    Escondido|            CA|           92026|
+|       5654|         Jerry|         Smith|     XXXXXXXXX|        XXXXXXXXX|   9293 Hidden Vista|       Caguas|            PR|           00725|
+|      10591|       Deborah|      Humphrey|     XXXXXXXXX|        XXXXXXXXX|       141 Honey Way|     Plymouth|            MA|           02360|
+|      12284|          Mary|         Smith|     XXXXXXXXX|        XXXXXXXXX|1185 Rustic River...|    New Haven|            CT|           06511|
+|      12431|          Mary|          Rios|     XXXXXXXXX|        XXXXXXXXX|   1221 Cinder Pines|      Kaneohe|            HI|           96744|
++-----------+--------------+--------------+--------------+-----------------+--------------------+-------------+--------------+----------------+
+
+>>> top10customers = hc.sql(" select c1.*, c2.cnt from customers c1 join (select customer_id, count( distinct order_item_order_id) cnt from customers c join orders o on c.customer_id = o.order_customer_id join order_items oi on o.order_id = oi.order_item_order_id group by c.customer_id order by cnt desc, customer_id asc limit 10) c2 on c1.customer_id = c2.customer_id order by c2.cnt desc")
++-----------+--------------+--------------+--------------+-----------------+--------------------+-------------+--------------+----------------+---+
+|customer_id|customer_fname|customer_lname|customer_email|customer_password|     customer_street|customer_city|customer_state|customer_zipcode|cnt|
++-----------+--------------+--------------+--------------+-----------------+--------------------+-------------+--------------+----------------+---+
+|       5654|         Jerry|         Smith|     XXXXXXXXX|        XXXXXXXXX|   9293 Hidden Vista|       Caguas|            PR|           00725| 15|
+|       3710|        Ashley|         Smith|     XXXXXXXXX|        XXXXXXXXX|   1564 Gentle Jetty|  Springfield|            MO|           65807| 14|
+|       5283|         Jacob|      Guerrero|     XXXXXXXXX|        XXXXXXXXX|  3309 Grand Circuit|    Escondido|            CA|           92026| 14|
+|      10591|       Deborah|      Humphrey|     XXXXXXXXX|        XXXXXXXXX|       141 Honey Way|     Plymouth|            MA|           02360| 14|
+|      12284|          Mary|         Smith|     XXXXXXXXX|        XXXXXXXXX|1185 Rustic River...|    New Haven|            CT|           06511| 14|
+|      12431|          Mary|          Rios|     XXXXXXXXX|        XXXXXXXXX|   1221 Cinder Pines|      Kaneohe|            HI|           96744| 14|
+|        221|          Mary|           Cox|     XXXXXXXXX|        XXXXXXXXX|7463 Clear Branch...|     Columbus|            OH|           43230| 13|
+|        569|          Mary|          Frye|     XXXXXXXXX|        XXXXXXXXX|   4834 Easy Terrace|     Meridian|            ID|           83642| 13|
+|        791|          Mary|         Smith|     XXXXXXXXX|        XXXXXXXXX|     6950 Honey Line|       Canton|            MI|           48187| 13|
+|       1443|        Denise|         Cohen|     XXXXXXXXX|        XXXXXXXXX|8361 Misty Subdiv...|  West Orange|            NJ|           07052| 13|
++-----------+--------------+--------------+--------------+-----------------+--------------------+-------------+--------------+----------------+---+
+
+
+
+>>> rankProducts = hc.sql("select p.product_id, p.product_category_id,product_name,product_description,product_price,product_image, d.department_id,p.product_price, rank() over (partition by d.department_id order by p.product_price) rnk_products, dense_rank() over (partition by d.department_id order by p.product_price) drnk_products from products p join categories c on p.product_category_id = c.category_id join departments d on c.category_department_id = d.department_id")
+rankProducts.registerTempTable("rankProducts")
+>>> rankProducts100 = hc.sql("select * from rankProducts where product_id < 100")
++----------+-------------------+--------------------+-------------------+-------------+--------------------+-------------+-------------+---+---+
+|product_id|product_category_id|        product_name|product_description|product_price|       product_image|department_id|product_price|_c8|_c9|
++----------+-------------------+--------------------+-------------------+-------------+--------------------+-------------+-------------+---+---+
+|        38|                  3|Nike Men's Hyperv...|                   |          0.0|http://images.acm...|            2|          0.0|  1|  1|
+|        89|                  5|Nike Elite Crew B...|                   |         14.0|http://images.acm...|            2|         14.0|  2|  2|
+|        39|                  3|Nike Women's Pro ...|                   |        21.99|http://images.acm...|            2|        21.99|  6|  4|
+|        64|                  4|Nike Women's Pro ...|                   |        21.99|http://images.acm...|            2|        21.99|  6|  4|
+|        80|                  5|Nike Women's Pro ...|                   |        21.99|http://images.acm...|            2|        21.99|  6|  4|
+|        99|                  6|Nike Women's Pro ...|                   |        21.99|http://images.acm...|            2|        21.99|  6|  4|
+|        47|                  3|Nike Women's Pro ...|                   |        24.97|http://images.acm...|            2|        24.97| 15|  6|
+|        87|                  5|Nike Women's Pro ...|                   |        24.97|http://images.acm...|            2|        24.97| 15|  6|
+|        93|                  5|Under Armour Men'...|                   |        24.99|http://images.acm...|            2|        24.99| 20|  7|
+|        34|                  3|Nike Women's Pro ...|                   |         28.0|http://images.acm...|            2|         28.0| 23| 10|
+|        57|                  4|Nike Women's Pro ...|                   |         28.0|http://images.acm...|            2|         28.0| 23| 10|
+|        75|                  5|Nike Women's Pro ...|                   |         28.0|http://images.acm...|            2|         28.0| 23| 10|
+|        98|                  6|Nike Women's Pro ...|                   |         28.0|http://images.acm...|            2|         28.0| 23| 10|
+|        18|                  2|Reebok Men's Full...|                   |        29.97|http://images.acm...|            2|        29.97| 29| 11|
+|        22|                  2|Kijaro Dual Lock ...|                   |        29.99|http://images.acm...|            2|        29.99| 30| 12|
+|        28|                  3|adidas Brazuca 20...|                   |        29.99|http://images.acm...|            2|        29.99| 30| 12|
+|        43|                  3|Kijaro Dual Lock ...|                   |        29.99|http://images.acm...|            2|        29.99| 30| 12|
+|        53|                  4|adidas Brazuca 20...|                   |        29.99|http://images.acm...|            2|        29.99| 30| 12|
+|        67|                  4|Kijaro Dual Lock ...|                   |        29.99|http://images.acm...|            2|        29.99| 30| 12|
+|        82|                  5|Kijaro Dual Lock ...|                   |        29.99|http://images.acm...|            2|        29.99| 30| 12|
++----------+-------------------+--------------------+-------------------+-------------+--------------------+-------------+-------------+---+---+
+
+>>> products100 = hc.sql("select p.* from problem6.products p join  problem6.order_items oi on p.product_id = oi.order_item_product_id join orders o on oi.order_item_order_id = o.order_id join  top10customers t on o.order_customer_id = t.customer_id  where p.product_price < 100")
++----------+-------------------+--------------------+-------------------+-------------+--------------------+
+|product_id|product_category_id|        product_name|product_description|product_price|       product_image|
++----------+-------------------+--------------------+-------------------+-------------+--------------------+
+|       191|                  9|Nike Men's Free 5...|                   |        99.99|http://images.acm...|
+|       191|                  9|Nike Men's Free 5...|                   |        99.99|http://images.acm...|
+|       191|                  9|Nike Men's Free 5...|                   |        99.99|http://images.acm...|
+|       276|                 13|Under Armour Wome...|                   |        31.99|http://images.acm...|
+|       365|                 17|Perfect Fitness P...|                   |        59.99|http://images.acm...|
+|       365|                 17|Perfect Fitness P...|                   |        59.99|http://images.acm...|
+|       365|                 17|Perfect Fitness P...|                   |        59.99|http://images.acm...|
+|       365|                 17|Perfect Fitness P...|                   |        59.99|http://images.acm...|
+|       365|                 17|Perfect Fitness P...|                   |        59.99|http://images.acm...|
+|       502|                 24|Nike Men's Dri-FI...|                   |         50.0|http://images.acm...|
+|       502|                 24|Nike Men's Dri-FI...|                   |         50.0|http://images.acm...|
+|       502|                 24|Nike Men's Dri-FI...|                   |         50.0|http://images.acm...|
+|       502|                 24|Nike Men's Dri-FI...|                   |         50.0|http://images.acm...|
+|       502|                 24|Nike Men's Dri-FI...|                   |         50.0|http://images.acm...|
+|       502|                 24|Nike Men's Dri-FI...|                   |         50.0|http://images.acm...|
+|       502|                 24|Nike Men's Dri-FI...|                   |         50.0|http://images.acm...|
+|       627|                 29|Under Armour Girl...|                   |        39.99|http://images.acm...|
+|       730|                 33|LIJA Women's Argy...|                   |         80.0|http://images.acm...|
+|       797|                 36|Hirzl Women's Sof...|                   |        17.99|http://images.acm...|
+|      1014|                 46|O'Brien Men's Neo...|                   |        49.98|http://images.acm...|
++----------+-------------------+--------------------+-------------------+-------------+--------------------+
+
+
+>>> hc.sql("create table problem6.product_rank_result as select product_id, product_category_id, product_name,product_description,product_price,product_image,department_id,rnk_products,drnk_products from rankProducts where product_id < 100")
+>>> hc.sql("create table problem6.top_products as select p.* from problem6.products p join  problem6.order_items oi on p.product_id = oi.order_item_product_id join orders o on oi.order_item_order_id = o.order_id join  top10customers t on o.order_customer_id = t.customer_id  where p.product_price < 100")

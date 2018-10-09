@@ -1,0 +1,409 @@
+7 
+I gained so much from Durga Udemy/Itvresity labs and discussion forums/Arun Blogs
+So I wanted to give something back in return to this community for other folks who are preparing for the exam
+Hope you find this useful. If any typo or correction needed in the questions please add it to comment. I will fix it.
+
+In my opinion if you can solve these you are ready to take the exam
+
+Background
+#Use itversity labs tables (orders,orderitems,products)
+#Use Scala/Spark RDD/Spark SQL/DF-DataFrame/Hive SQL
+#Some functions you need to be familiar with to solve these
+reduceByKey
+sortByKey
+groupByKey
+aggregateByKey
+#Learn/Remember these calls
+spark-shell --master yarn --packages com.databricks:spark-avro_2.10:2.0.1 --conf spark.ui.port=xxxxxx
+sqlContext.setConf(“spark.sql.avro.compression.codec”,“snappy”)
+sqlContext.setConf(“spark.sql.parquet.compression.codec”,“gzip”) (or snappy)
+sqlContext.setConf(“spark.sql.xxxxx.compression.codec”,“uncompressed”) --> very important to know how to reset. if not you can open new spark shell for every problem to be on the safer side so that you dont mix up compression/no compression
+
+someDF.registerTempTable(“temptablename”)
+sqlContext.sql(“select * from temptablename”).show
+var someDF=sqlContext.sql(“select * from temptablename”)
+someDF.write.avro / someDF.write.parquet
+someDF.saveAsTable(“hivetablename”)
+
+var hc = new org.apache.spark.sql.hive.HiveContext(sc);
+var someDF=hc.sql(“select xxxxxx dbname.tablename”)
+
+To handle output as sequence… RDD(K,V) . K and V should be string
+
+#You can solve some of these problems either using RDD/DF functions or using spark sql
+My way of doing is… if only one table involved or involves 2 tables with simple join – Do it in RDD/DF/Function/join/leftouterjoin
+If 2 or more tables involved with complex joins. convert DFs to temp tables and do the joins with sql and save the output
+++++++++++++++++++++++++++++++++
+
+Problem 1 :
+Import orders table from mysql (db: retail_db , user : retail_user , password : xxxx)
+Import only records that are in “COMPLETE” status
+Import all columns other than customer id
+Save the imported data as text and tab delimitted in this hdfs location /user/yourusername/jay/problem1/
+sqoop import  --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password cloudera --table "orders" --where "order_status='COMPLETE'" --columns " order_id,order_date,order_status" --fields-terminated-by "\t" --target-dir "/user/yourusername/jay/problem1/"
+
+…
+
+Problem 2
+Import orders table from mysql (db: retail_db , user : retail_user , password : xxxx)
+Import all records and columns from Orders table
+Save the imported data as text and tab delimitted in this hdfs location /user/yourusername/jay/problem2/
+
+sqoop import -connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password "cloudera" --table "orders" --fields-terminated-by "\t" --target-dir "/user/yourusername/jay/problem2/"
+…
+
+Problem 3 :
+Export orders data into mysql
+Input Source : /user/yourusername/jay/problem2/
+Target Table : Mysql . DB = retail_export . Table Name : jay__mock_orders
+Reason for somealias in table name is … to not overwrite others in mysql db in labs
+(In exam cloudera most probably pre creates the target table for you.)
+
+sqoop export --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password "cloudera" --table "jay__mock_orders" --export-dir "/user/yourusername/jay/problem2" --input-fields-terminated-by "\t"
+
+--error becasue ORDER_COUNT is unknownsqoop
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password "cloudera"  --query " select ORDER_STATUS, count(*) as ORDER_COUNT from jay__mock_orders where \$CONDITIONS group by ORDER_STATUS order by ORDER_COUNT desc" --split-by "ORDER_COUNT" --as-avrodatafile --compress -compression-codec "org.apache.hadoop.io.compress.SnappyCodec" --target-dir "/user/yourusername/jay/problem4/avro"
+…
+
+Problem 4 :
+Read data from hive and perform transformation and save it back in HDFS
+Read table populated from Problem 3 (jay__mock_orders )
+Produce output in this format (2 fields) , sort by order count in descending and save it as avro with snappy compression in hdfs location /user/yourusername/jay/problem4/avro-snappy
+ORDER_STATUS : ORDER_COUNT
+COMPLETE 54
+CANCELLED 89
+INPROGRESS 23
+
+Save above output in avro snappy compression in avro format in hdfs location /user/yourusername/jay/problem4/avro
+
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password "cloudera"  --query " select ORDER_STATUS, count(*) as ORDER_COUNT from jay__mock_orders where \$CONDITIONS group by ORDER_STATUS order by ORDER_COUNT desc" --split-by "order_status" --as-avrodatafile --compress -compression-codec "org.apache.hadoop.io.compress.SnappyCodec" --target-dir "/user/yourusername/jay/problem4/avro-snappy"
+
+
+
+…
+
+Problem 5 :
+
+Import orders table from mysql (db: retail_db , user : retail_user , password : xxxx)
+Import all records and columns from Orders table
+Save the imported data as avro and snappy compression in hdfs location /user/yourusername/jay/problem5-avro-snappy/
+
+Read above hdfs data
+Consider orders only in “COMPLETE” status and order id between 1000 and 50000 (1001 to 49999)
+Save the output (only 2 columns orderid and orderstatus) in parquet format with gzip compression in location /user/yourusername/jay/problem5-parquet-gzip/
+Advance : Try if you can save output only in 2 files (Tip : use coalesce(2))
+
+
+sqoop import -connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password "cloudera" --table "orders" --target-dir "/user/yourusername/jay/problem2/" --as-avrodatafile --compress --compression-codec "org.apache.hadoop.io.compress.SnappyCodec" --target-dir "/user/yourusername/jay/problem5-avro-snappy/"
+
+>>> from pyspark.sql import SQLContext, Row, functions
+>>> sq = SQLContext(sc)
+>>> sq.setConf("spark.sql.shuffle.partitions","10")
+>>> oDF = sq.read.format("com.databricks.spark.avro").load("/user/yourusername/jay/problem5-avro-snappy/")
+>>> oFilter = oDF.select(oDF.order_id,oDF.order_status).filter("order_status = 'COMPLETE' and order_id between 1000 and 50000")
+
+>>> sq.setConf("spark.sql.parquet.compression.codec","gzip")
+>>> oFilter.write.parquet("/user/yourusername/jay/problem5-parquet-gzip/")
+>>> oFilter.repartition(2).write.parquet("/user/yourusername/jay/problem5-parquet-gzip2/")
+
+…
+
+Problem 6 :
+
+Import orders table from mysql (db: retail_db , user : retail_user , password : xxxx)
+Import all records and columns from Orders table
+Save the imported data as text and tab delimitted in this hdfs location /user/yourusername/jay/problem6/orders/
+
+Import order_items table from mysql (db: retail_db , user : retail_user , password : xxxx)
+Import all records and columns from Order_items table
+Save the imported data as text and tab delimitted in this hdfs location /user/yourusername/jay/problem6/order-items/
+
+Read orders data from above HDFS location
+Read order items data form above HDFS location
+Produce output in this format (price and total should be treated as decimals)
+ORDER_ID ORDER_ITEM_ID PRODUCT_PRICE ORDER_SUBTOTAL ORDER_TOTAL
+
+Save above output as ORC in hive table “jay_mock_orderdetails”
+(Tip : Try saving into hive table from DF directly without explicit table creation manually)
+
+sqoop import -connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password "cloudera" --table "orders"  --fields-terminated-by "\t"  --target-dir "/user/yourusername/jay/problem6/orders/"
+>>> from pyspark.sql import SQLContext, Row, functions
+>>> sq = SQLContext(sc)
+>>> sq.setConf("spark.sql.partitions.shuffle", "10")
+>>> oRDD = sc.textFile("/user/yourusername/jay/problem6/orders/")
+>>> oiRDD = sc.textFile("/user/yourusername/jay/problem6/order-items/")
+>>> hc = HiveContext(sq)
+>>> oDF = oRDD.map(lambda x: Row(ORDER_ID = int(x.split("\t")[0]))).toDF()
+>>> oDF.registerTempTable("o")
+>>> oiDF = oiRDD.map(lambda x: x.split("\t")).map(lambda x: Row(ORDER_ID =int(x[0]), ORDER_ITEM_ID =int(x[1]), PRODUCT_PRICE=float(x[5]), ORDER_SUBTOTAL =float(x[4]), QTY = int(x[3]) ) ).toDF()
+>>> oiDF.registerTempTable("oi")
+>>> result = hc.sql("select oi.ORDER_ID, ORDER_ITEM_ID,PRODUCT_PRICE,ORDER_SUBTOTAL, QTY * ORDER_SUBTOTAL as ORDER_TOTAL from o join oi on o.ORDER_ID = oi.ORDER_ID")
+>>> result.write.format("orc").saveAsTable("jay_mock_orderdetails")
+Alternative:
+>>> result.write.format("orc").save("/user/hive/warehouse/jay_mock_orderdetails4")
+create table jay_mock_orderdetails2 ( order_id bigint, order_item_id bigint, product_price double, order_subtotal double, order_total double) STORED AS ORC LOCATION "/user/hive/warehouse/jay_mock_orderdetails2"
+
+…
+
+Problem 7:
+
+Import order_items table from mysql (db: retail_db , user : retail_user , password : xxxx)
+Import all records and columns from Order_items table
+Save the imported data as parquet in this hdfs location /user/yourusername/jay/problem7/order-items/
+
+Import products table from mysql (db: retail_db , user : retail_user , password : xxxx)
+Import all records and columns from products table
+Save the imported data as avro in this hdfs location /user/yourusername/jay/problem7/products/
+
+Read above orderitems and products from HDFS location
+Produce this output (price and total should be treated as decimal)
+
+ORDER_ID PRODUCT_ID PRODUCT_PRICE ORDER_SUBTOTAL
+
+Save above output as avro snappy in hdfs location /user/yourusername/jay/problem7/output-avro-snappy/
+
+
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password "cloudera" --table "order_items" --target-dir "/user/yourusername/jay/problem7/order_items/" --as-parquetfile
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password "cloudera" --table "products" --target-dir "/user/yourusername/jay/problem7/products/" --as-avrodatafile
+
+>>> oDF = sq.read.parquet("/user/yourusername/jay/problem7/order_items/")
+>>> pDF = sq.read.format("com.databricks.spark.avro").load("/user/yourusername/jay/problem7/products/")
+oijoinp = oDF.join(pDF, oDF.order_item_product_id == pDF.product_id).select(oDF.order_item_order_id.alias("ORDER_ID"), pDF.product_id.alias("PRODUCT_ID"), pDF.product_price.alias("PRODUCT_PRICE"), oDF.order_item_subtotal.alias("ORDER_SUBTOTAL") )
+>>> sq.setConf("spark.sql.avro.compression.codec","snappy")
+>>> oijoinp.write.format("com.databricks.spark.avro").save("/user/yourusername/jay/problem7/output-avro-snappy/")
+
+>>> result = sq.sql(" select order_item_order_id as ORDER_ID, product_id as PRODUCT_ID, product_price as PRODUCT_PRICE, order_item_subtotal as ORDER_SUBTOTAL from o join p on o.order_item_product_id = p.product_id")
+>>> oDF.registerTempTable("o")
+>>> pDF.registerTempTable("p")
+>>> result = sq.select(" select order_item_order_id as ORDER_ID, product_id as PRODUCT_ID, product_price as PRODUCT_PRICE, order_item_subtotal as ORDER_SUBTOTAL from o join p on o.order_item_product_id = p.product_id")
+
+…
+
+Problem 8
+
+Read order item from /user/yourusername/jay/problem7/order-items/
+Read products from /user/yourusername/jay/problem7/products/
+
+Produce output that shows product id and total no. of orders for each product id.
+Output should be in this format… sorted by order count descending
+If any product id has no order then order count for that product id should be “0”
+
+PRODUCT_ID PRODUCT_PRICE ORDER_COUNT
+
+Output should be saved as sequence file with Key=ProductID , Value = PRODUCT_ID|PRODUCT_PRICE|ORDER_COUNT (pipe separated)
+
+>>> oiDF = sq.read.parquet("/user/yourusername/jay/problem7/order_items/")
+>>> pDF = sq.read.format("com.databricks.spark.avro").load("/user/yourusername/jay/problem7/products/")
+>>> oiDF.registerTempTable("oi")
+>>> pDF.registerTempTable("p")
+>>> result = sq.sql("select product_id as PRODUCT_ID , product_price as PRODUCT_PRICE , nvl(count(order_item_id),0) as ORDER_COUNT from oi right join p on oi.order_item_product_id = p.product_id group by product_id,product_price")
+>>> result.rdd.map(lambda x: (x[0],'|'.join(str(x[0]),str(x[1]),str(x[2]))  )).saveAsSequenceFile("/user/yourusername/jay/problem7/")
+result.rdd.map(lambda x: (x[0],'|'.join( (str(x[0]),str(x[1]),str(x[2]) ))  )).saveAsNewAPIHadoopFile("/user/yourusername/jay/problem8/","org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat", keyClass="org.apache.hadoop.io.IntWritable", valueClass="org.apache.hadoop.io.Text")
+
+
+…
+
+Problem 9
+
+Import orders table from mysql (db: retail_db , user : retail_user , password : xxxx)
+Import all records and columns from Orders table
+Save the imported data as avro in this hdfs location /user/yourusername/jay/problem9/orders-avro/
+
+Read above Avro orders data
+Convert to JSON
+Save JSON text file in hdfs location /user/yourusername/jay/problem9/orders-json/
+
+Read json data from /user/yourusername/jay/problem9/orders-json/
+Consider only “COMPLETE” orders.
+Save orderid and order status (just 2 columns) as JSON text file in location /user/yourusername/jay/problem9/orders-mini-json/
+
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username "retail_dba" --password "cloudera" --table "orders" --target-dir "/user/yourusername/jay/problem9/orders-avro/" --as-avrodatafile
+>>> from pyspark.sql import SQLContext, Row, functions
+>>> sq = SQLContext(sc)
+>>> sq.setConf("spark.sql.shuffle.partitions", "10")
+>>> oDF = sq.read.format("com.databricks.spark.avro").load("/user/yourusername/jay/problem9/orders-avro/")
+>>> oDF.toJSON().saveAsTextFile("/user/yourusername/jay/problem9/orders-json/")
+>>> ojsonDF = sq.read.json("/user/yourusername/jay/problem9/orders-json/")
+>>> ojsonDF.filter("order_status='COMPLETE'").select(ojsonDF.order_id,ojsonDF.order_status).toJSON().saveAsTextFile("/user/yourusername/jay/problem9/orders-mini-json/")
+>>> oDF.write.json("/user/yourusername/jay/problem9/orders-json2")                                                                                                      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########################################################################################################################
+Hi Meghal,
+Kindly find my solutions below.
+I have tried to solve all in sparkSql as I am more comfortable in this.
+Please check and let me know if there is any modification/correction needed.
+
+I still have a doubt in exercise 6, its count of what?? as per my query, it counts the order_id and shows 1 for each row.(which I think is wrong)
+
+Problem 1.
+sqoop import 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_db 
+–username retail_user 
+–password itversity 
+–table orders 
+–columns order_id,order_date,order_status 
+–where "order_status like ‘COMPLETE’ " 
+–target-dir /user/aparna149/aparna/problem1 
+–as-textfile 
+–fields-terminated-by ‘\t’
+
+Problem 2.
+sqoop import 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_db 
+–username retail_user 
+–password itversity 
+–table orders 
+–target-dir /user/aparna149/aparna/problem2 
+–fields-terminated-by ‘\t’ 
+–as-textfile
+
+Problem 3.
+mysql
+create table aparna_mock_orders as select * from retail_db.orders ;
+truncate aparna_mock_orders;
+
+sqoop export 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_export 
+–username retail_user 
+–password itversity 
+–table aparna_mock_orders 
+–export-dir /user/aparna149/aparna/problem2 
+–input-fields-terminated-by ‘\t’
+
+Problem 4.
+sqoop import 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_export 
+–username retail_user 
+–password itversity 
+–query "select order_status,count(1) order_count from aparna_mock_orders where $CONDITIONS group by order_status order by order_count desc " 
+–as-avrodatafile 
+–compress 
+–compression-codec snappy 
+–target-dir /user/aparna149/aparna/problem4/avro-snappy 
+-m 1
+
+Problem 5.
+sqoop import 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_db 
+–username retail_user 
+–password itversity 
+–table orders 
+–as-avrodatafile 
+–compress 
+–compression-codec snappy 
+–target-dir /user/aparna149/aparna/problem5-avro-snappy/
+
+orders= sqlContext.read.format(“com.databricks.spark.avro”).load("/user/aparna149/aparna/problem5-avro-snappy")
+orders.registerTempTable(“orders”)
+result = sqlContext.sql(“select order_id,order_status from orders where order_status like ‘COMPLETE’ and order_id > 1000 and order_id < 50000”)
+sqlContext.setConf(“spark.sql.parquet.compression.codec”,“gzip”)
+result.coalesce(2).write.parquet("/user/aparna149/aparna/problem5-parquet-gzip")
+
+Problem 6.
+sqoop import 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_db 
+–username retail_user 
+–password itversity 
+–table orders 
+–as-textfile 
+–fields-terminated-by ‘\t’ 
+–target-dir /user/aparna149/aparna/problem6/orders/
+
+sqoop import 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_db 
+–username retail_user 
+–password itversity 
+–table order_items 
+–as-textfile 
+–fields-terminated-by ‘\t’ 
+–target-dir /user/aparna149/aparna/problem6/order_items/
+
+orders = sc.textFile("/user/aparna149/aparna/problem6/orders/")
+ordersDF=orders.map(lambda x: x.split("\t")).map(lambda x: Row(order_id =x[0])).toDF()
+ordersDF.registerTempTable(“orders”)
+order_items = sc.textFile("/user/aparna149/aparna/problem6/order_items")
+order_itemsDF = order_items.map(lambda x: x.split("\t")).map(lambda x: Row(order_item_id =x[0],order_item_order_id=x[1],order_item_subtotal=x[4],order_item_product_price=x[5])).toDF()
+order_itemsDF.registerTempTable(“order_items”)
+
+result = sqlContext.sql(“select order_id, order_item_id,cast (order_item_product_price as decimal),cast(order_item_subtotal as decimal),count(1) order_total from order_items oi join orders o on oi.order_item_order_id = o.order_id group by order_id, order_item_id,order_item_product_price,order_item_subtotal”)
+
+sqlContext.sql(“use aparna”)
+result.write.format(“orc”).saveAsTable(“aparna_mock_orderdetails”)
+
+Exercise 7.
+sqoop import 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_db 
+–username retail_user 
+–password itversity 
+–table order_items 
+–as-parquetfile 
+–target-dir /user/aparna149/aparna/problem7/order_items/
+
+sqoop import 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_db 
+–username retail_user 
+–password itversity 
+–table products --as-avrodatafile 
+–target-dir /user/aparna149/aparna/problem7/products/
+
+order_items = sqlContext.read.parquet("/user/aparna149/aparna/problem7/order_items")
+order_items.registerTempTable(“order_items”)
+
+products =sqlContext.read.format(“com.databricks.spark.avro”).load("/user/aparna149/aparna/problem7/products/")
+products.registerTempTable(“products”)
+
+result = sqlContext.sql(“select order_item_id,product_id,cast(product_price as decimal),cast(order_item_subtotal as decimal) from products p join order_items oi on p.product_id = oi.order_item_product_id “)
+sqlContext.setConf(“spark.sql.avro.compression.codec”,“snappy”)
+result.write.format(“com.databricks.spark.avro”).save(”/user/aparna149/aparna/problem7/output-avro-snappy/”)
+
+Exercise 8
+order_items = sqlContext.read.parquet("/user/aparna149/aparna/problem7/order_items")
+order_items.registerTempTable(“order_items”)
+
+products =sqlContext.read.format(“com.databricks.spark.avro”).load("/user/aparna149/aparna/problem7/products/")
+products.registerTempTable(“products”)
+
+result =sqlContext.sql(“select product_id,product_price,count(1) order_count from products p left outer join order_items oi on p.product_id = oi.order_item_product_id group by product_id,product_price “)
+resultMap = result.map(lambda x: (x[0], (str(x[0])+”|”+str(x[1])+"|"+str(x[2]))))
+resultMap.saveAsSequenceFile("/user/aparna149/aparna/problem8/orders_sequence")
+
+Exercise 9
+sqoop import 
+–connect jdbc:mysql://ms.itversity.com:3306/retail_db 
+–username retail_user 
+–password itversity 
+–table orders 
+–as-avrodatafile 
+–target-dir /user/aparna149/aparna/problem9/orders-avro/
+
+orders= sqlContext.read.format(“com.databricks.spark.avro”).load("/user/aparna149/aparna/problem9/orders-avro/")
+orders.write.json("/user/aparna149/aparna/problem9/orders-json/")
+ojson=sqlContext.read.json("/user/aparna149/aparna/problem9/orders-json/")
+ojson.registerTempTable(“ojson”)
+result = sqlContext.sql(“select order_id, order_status from ojson where order_status like ‘COMPLETE’ “)
+result.write.json(”/user/aparna149/aparna/problem9/orders-mini-json/”)
+
+Thanks
+Aparna
+

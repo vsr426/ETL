@@ -1,0 +1,62 @@
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+a1.sources.r1.type = netcat
+a1.sources.r1.bind = localhost
+a1.sources.r1.port = 44444
+
+a1.sinks.k1.type = logger
+
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 100
+a1.channels.c1.transactionCapacity = 100
+
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+
+
+# example.conf: A single-node Flume configuration
+
+# Name the components on this agent
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# Describe/configure the source
+a1.sources.r1.type = netcat
+a1.sources.r1.bind = localhost
+a1.sources.r1.port = 44444
+
+# Describe the sink
+a1.sinks.k1.type = logger
+
+# Use a channel which buffers events in memory
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+
+
+******************************************
+agent_foo.sources = avro_1
+agent_foo.sinks = hdfs-Cluster1-sink
+agent_foo.channels = memory_1
+
+
+agent_foo.sources.avro_1.type = avro
+agent_foo.sources.avro_1.bind = localhost
+agent_foo.sources.avro_1.port = 44444
+
+agent_foo.sinks.hdfs-Cluster1-sink.type = hdfs
+agent_foo.sinks.hdfs-Cluster1-sink.hdfs.path = hdfs://quickstart.cloudera/flume/webdata
+
+agent_foo.channels.memory_1.type = memory
+agent_foo.channels.memory_1.capacity = 100
+agent_foo.channels.memory_1.transactionCapacity = 100
+
+agent_foo.sources.avro_1.channels = memory_1
+agent_foo.sinks.hdfs-Cluster1-sink.channel = memory_1

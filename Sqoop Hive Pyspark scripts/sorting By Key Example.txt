@@ -1,0 +1,26 @@
+def getTopDenseN(reclist,topN):
+	x=[]
+	topNPrices=[]
+	prodPrices=[]
+	for i in reclist:
+		prodPrices.append(float(i.split(",")[4]))
+	print "Priceslist"
+	print(prodPrices)
+	import itertools
+	topNPrices=list(itertools.islice(sorted(set(prodPrices),reverse=True),0,topN))
+	print " TopN Prices"
+	print(topNPrices)
+	for j in sorted(reclist,  key=lambda x : float(x.split(",")[4]),reverse=True):
+        	if(float(j.split(",")[4]) in topNPrices):
+                	x.append(j)
+	print "final list"
+	print(x)
+	return(x)
+
+
+
+products=sc.textFile("/user/cloudera/sqoop_imports/products")
+productsMap=products.map(lambda x: (int(x.split(",")[1]),x))
+productByCat=productsMap.groupByKey().map(lambda x : (x[0],list(x[1])))
+productTopByCat=productByCat.flatMap(lambda x : getTopDenseN(x[1],2))
+for i in productTopByCat.take(2):   print(i)

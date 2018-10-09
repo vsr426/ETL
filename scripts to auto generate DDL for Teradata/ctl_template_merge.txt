@@ -1,0 +1,66 @@
+DEFINE JOB @tbl 
+DESCRIPTION 'Load Teradata tables from Flat File'
+( 
+DEFINE SCHEMA EDW_WCB_FL 
+DESCRIPTION             'Description of Flat Files'
+( 
+@def  
+); 
+
+ 
+DEFINE OPERATOR FILE_READER
+TYPE DATACONNECTOR PRODUCER 
+SCHEMA EDW_WCB_FL         
+ATTRIBUTES 
+( 
+VARCHAR PrivateLogName = 'PL_@tbl', 
+VARCHAR OpenMode = 'read', 
+VARCHAR Format = 'Delimited',
+VARCHAR QuotedData= 'Optional',
+VARCHAR OpenQuoteMark = '"',
+VARCHAR CloseQuoteMark = '"',
+VARCHAR TextDelimiter = '~',
+VARCHAR FileName = @FileName ,
+VARCHAR TrimColumns= 'Both'
+); 
+
+DEFINE OPERATOR CONSUMER_OPERATOR 
+DESCRIPTION        'Target Table Properties'
+TYPE UPDATE 
+SCHEMA * 
+ATTRIBUTES 
+( 
+VARCHAR WorkTable = @jobvar_workdb || '.WT_@tbl', 
+VARCHAR ErrorTable1 = @jobvar_workdb || '.ET_@tbl',                
+VARCHAR ErrorTable2 = @jobvar_workdb || '.UV_@tbl', 
+INTEGER TenacityHours = 4, 
+INTEGER TenacitySleep = 6,         
+INTEGER MaxSessions = 32, 
+VARCHAR TdpID = @jobvar_tdpid, 
+VARCHAR UserName = @jobvar_username,        
+VARCHAR UserPassword = @jobvar_password, 
+VARCHAR WorkingDatabase = @jobvar_database, 
+VARCHAR         TargetTable = @jobvar_database || '.@tbl', 
+VARCHAR LogTable = @jobvar_workdb || '.@tbl', 
+VARCHAR PrivateLogName         = 'CL_@tbl', 
+VARCHAR DateForm = 'ANSIDATE',
+VARCHAR QueryBandSessInfo= 'Target=@tbl;' 
+); 
+
+APPLY 
+('UPDATE ' || @jobvar_database || '.@tbl SET  
+@upd 
+ WHERE 
+@whr
+;',
+'INSERT INTO ' || @jobvar_database || '.@tbl ( 
+@ins
+) VALUES ( 
+@val
+);' 
+) 
+INSERT FOR MISSING UPDATE ROWS
+TO OPERATOR (CONSUMER_OPERATOR()[1]) 
+SELECT * FROM OPERATOR (FILE_READER() [1]) ; 
+)
+;

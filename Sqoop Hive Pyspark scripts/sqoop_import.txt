@@ -1,0 +1,12 @@
+hdfs dfs -rm /user/cloudera/sqoop_import/joins/first/*
+hdfs dfs -rmdir /user/cloudera/sqoop_import/joins/first/
+
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --query 'select c.category_id, c.category_name, count(order_item_quantity) as count from order_items oi inner join products p on oi.order_item_product_id = p.product_id inner join categories c on c.category_id = p.product_category_id  group by c.category_id, c.category_name having $CONDITIONS order by count desc ' --split-by c.category_id --target-dir=/user/cloudera/sqoop_import/joins/first/
+
+
+
+
+sqoop import -m 12 --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --query 'select c.category_id, c.category_name, count(order_item_quantity) as count from order_items oi inner join products p on oi.order_item_product_id = p.product_id inner join categories c on c.category_id = p.product_category_id  group by c.category_id, c.category_name having $CONDITIONS order by count desc ' --split-by c.category_id --target-dir=/user/cloudera/sqoop_import/joins/first/
+
+
+sqoop import -m 12 --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --query 'select c.category_id, c.category_name, count(order_item_quantity) as count from order_items oi inner join products p on oi.order_item_product_id = p.product_id inner join categories c on c.category_id = p.product_category_id  group by c.category_id, c.category_name having $CONDITIONS order by count desc ' --split-by c.category_id --optionally-enclosed-by '\"' --escaped-by '\\' --fields-terminated-by '~' --lines-terminated-by '\n' --target-dir=/user/cloudera/sqoop_import/joins/first/

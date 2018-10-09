@@ -1,0 +1,518 @@
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table products --target-dir /user/cloudera/products --outdir javafiles --as-textfile --fields-terminated-by "|"
+hadoop fs -mkdir /user/cloudera/problem2/
+hadoop fs -mv /user/cloudera/products /user/cloudera/problem2/products
+hadoop fs -cat /user/cloudera/problem2/products/part-m-00000 | head -1
+hadoop fs -chmod 765 /user/cloudera/problem2/products/*
+hadoop fs -ls /user/cloudera/problem2/products
+
+pDF = sc.textFile("hadoop fs -ls /user/cloudera/problem2/products")
+from pyspark import Row
+pDF = sc.textFile("/user/cloudera/problem2/products").map(lambda x : x.split("|")).map(lambda x : Row(product_id = int(x[0]), product_category_id = int(x[1]) , product_name = str(x[2]), product_description = str(x[3]), product_price = float(x[4]), product_image=str(x[5])  )).toDF()
+
+>>> pDF
+DataFrame[product_category_id: bigint, product_description: string, product_id: bigint, product_image: string, product_name: string, product_price: double]
+
+from pyspark.sql.functions import *
+pDF = sc.textFile("/user/cloudera/problem2/products").map(lambda x : x.split("|")).map(lambda x : Row(product_id = int(x[0]), product_category_id = int(x[1]) , product_name = str(x[2].encode('utf-8')), product_description = str(x[3].encode('utf-8')), product_price = float(x[4]), product_image=str(x[5].encode('utf-8'))  )).toDF()
+>>> p100DF= pDF.filter(pDF.product_price < 100)
++-------------------+-------------------+----------+--------------------+--------------------+-------------+
+|product_category_id|product_description|product_id|       product_image|        product_name|product_price|
++-------------------+-------------------+----------+--------------------+--------------------+-------------+
+|                  2|                   |         1|http://images.acm...|Quest Q64 10 FT. ...|        59.98|
+|                  2|                   |         3|http://images.acm...|Under Armour Men'...|        89.99|
+|                  2|                   |         4|http://images.acm...|Under Armour Men'...|        89.99|
+|                  2|                   |         7|http://images.acm...|Schutt Youth Recr...|        99.99|
+|                  2|                   |         9|http://images.acm...|Nike Adult Vapor ...|         50.0|
+|                  2|                   |        13|http://images.acm...|Under Armour Men'...|        89.99|
+|                  2|                   |        15|http://images.acm...|Under Armour Kids...|        59.99|
+|                  2|                   |        18|http://images.acm...|Reebok Men's Full...|        29.97|
+|                  2|                   |        21|http://images.acm...|Under Armour Kids...|        54.99|
+|                  2|                   |        22|http://images.acm...|Kijaro Dual Lock ...|        29.99|
+|                  2|                   |        24|http://images.acm...|Elevation Trainin...|        79.99|
+|                  3|                   |        25|http://images.acm...|Quest Q64 10 FT. ...|        59.98|
+|                  3|                   |        26|http://images.acm...|Nike Men's USA Wh...|         90.0|
+|                  3|                   |        27|http://images.acm...|Nike Youth USA Aw...|         75.0|
+|                  3|                   |        28|http://images.acm...|adidas Brazuca 20...|        29.99|
+|                  3|                   |        29|http://images.acm...|Nike Men's USA Aw...|         90.0|
+|                  3|                   |        30|http://images.acm...|adidas Men's Germ...|         90.0|
+|                  3|                   |        31|http://images.acm...|   Nike+ Fuelband SE|         99.0|
+|                  3|                   |        33|http://images.acm...|adidas Brazuca 20...|        39.99|
+|                  3|                   |        34|http://images.acm...|Nike Women's Pro ...|         28.0|
++-------------------+-------------------+----------+--------------------+--------------------+-------------+
+
+>>> HpricePerCategory = p100DF.groupBy(p100DF.product_category_id).agg(max(p100DF.product_price))
+>>> HpricePerCategory.show()
+
++-------------------+------------------+
+|product_category_id|max(product_price)|
++-------------------+------------------+
+|                 31|             99.99|
+|                 32|             99.99|
+|                 33|             99.99|
+|                 34|             99.99|
+|                 35|             79.99|
+|                 36|             24.99|
+|                 37|             51.99|
+|                 38|             99.95|
+|                 39|             34.99|
+|                 40|             24.99|
+|                 41|             99.99|
+|                 42|               0.0|
+|                 43|              99.0|
+|                 44|             99.98|
+|                 45|             99.99|
+|                 46|             49.98|
+|                 47|             99.95|
+|                 48|             49.98|
+|                 49|             99.99|
+|                 50|              60.0|
++-------------------+------------------+
+
+
+>>> totProdPerCatDF = p100DF.groupBy(p100DF.product_category_id).agg(countDistinct(p100DF.product_id))
+>>> totProdPerCatDF.show()
++-------------------+-----------------+
+|product_category_id|count(product_id)|
++-------------------+-----------------+
+|                 31|                7|
+|                 32|               10|
+|                 33|               19|
+|                 34|                9|
+|                 35|                9|
+|                 36|               24|
+|                 37|               24|
+|                 38|               14|
+|                 39|               12|
+|                 40|               24|
+|                 41|               37|
+|                 42|                1|
+|                 43|                1|
+|                 44|               15|
+|                 45|                7|
+|                 46|                9|
+|                 47|               14|
+|                 48|                7|
+|                 49|               13|
+|                 50|               14|
++-------------------+-----------------+
+
+>>> totProdPerCatDF = p100DF.groupBy(p100DF.product_category_id).agg(countDistinct(p100DF.product_id).alias("tot_products"))
++-------------------+------------+
+|product_category_id|tot_products|
++-------------------+------------+
+|                 31|           7|
+|                 32|          10|
+|                 33|          19|
+|                 34|           9|
+|                 35|           9|
+|                 36|          24|
+|                 37|          24|
+|                 38|          14|
+|                 39|          12|
+|                 40|          24|
+|                 41|          37|
+|                 42|           1|
+|                 43|           1|
+|                 44|          15|
+|                 45|           7|
+|                 46|           9|
+|                 47|          14|
+|                 48|           7|
+|                 49|          13|
+|                 50|          14|
++-------------------+------------+
+
+
+>>> totProdPerCatDF = p100DF.groupBy(p100DF.product_category_id).agg(avg(p100DF.product_price).alias("avg_price"))
++-------------------+------------------+
+|product_category_id|         avg_price|
++-------------------+------------------+
+|                 31| 88.56142857142856|
+|                 32|             48.99|
+|                 33| 58.46157894736842|
+|                 34| 83.87888888888888|
+|                 35| 34.21222222222222|
+|                 36|19.198333333333338|
+|                 37| 36.40666666666667|
+|                 38|46.339285714285715|
+|                 39|23.740000000000006|
+|                 40|24.990000000000006|
+|                 41| 31.23648648648649|
+|                 42|               0.0|
+|                 43|              99.0|
+|                 44| 62.18933333333334|
+|                 45| 55.41857142857143|
+|                 46| 34.65111111111111|
+|                 47| 44.63071428571429|
+|                 48| 35.69714285714286|
+|                 49| 74.21692307692308|
+|                 50|53.714285714285715|
++-------------------+------------------+
+
+>>> totProdPerCatDF = p100DF.groupBy(p100DF.product_category_id).agg(round(avg(p100DF.product_price),2).alias("avg_price"))
++-------------------+---------+
+|product_category_id|avg_price|
++-------------------+---------+
+|                 31|    88.56|
+|                 32|    48.99|
+|                 33|    58.46|
+|                 34|    83.88|
+|                 35|    34.21|
+|                 36|     19.2|
+|                 37|    36.41|
+|                 38|    46.34|
+|                 39|    23.74|
+|                 40|    24.99|
+|                 41|    31.24|
+|                 42|      0.0|
+|                 43|     99.0|
+|                 44|    62.19|
+|                 45|    55.42|
+|                 46|    34.65|
+|                 47|    44.63|
+|                 48|     35.7|
+|                 49|    74.22|
+|                 50|    53.71|
++-------------------+---------+
+only showing top 20 rows
+
+>>> MinpricePerCategory = p100DF.groupBy(p100DF.product_category_id).agg(min(p100DF.product_price).alias("Min_Price"))
++-------------------+---------+
+|product_category_id|Min_Price|
++-------------------+---------+
+|                 31|    79.99|
+|                 32|    19.99|
+|                 33|     10.8|
+|                 34|    34.99|
+|                 35|     9.99|
+|                 36|    12.99|
+|                 37|     4.99|
+|                 38|    19.99|
+|                 39|    19.99|
+|                 40|    24.99|
+|                 41|     9.59|
+|                 42|      0.0|
+|                 43|     99.0|
+|                 44|    21.99|
+|                 45|    27.99|
+|                 46|    19.98|
+|                 47|    21.99|
+|                 48|    19.98|
+|                 49|    19.98|
+|                 50|     34.0|
++-------------------+---------+
+
+>>> pricePerCategory = p100DF.groupBy(p100DF.product_category_id).agg(max(p100DF.product_price).alias("Max_Price"), countDistinct(p100DF.product_id).alias("tot_products"), round(avg(p100DF.product_price),2).alias("avg_price"), min(p100DF.product_price).alias("Min_Price") )
+>>> pricePerCategory.show()
++-------------------+---------+------------+---------+---------+
+|product_category_id|Max_Price|tot_products|avg_price|Min_Price|
++-------------------+---------+------------+---------+---------+
+|                 31|    99.99|           7|    88.56|    79.99|
+|                 32|    99.99|          10|    48.99|    19.99|
+|                 33|    99.99|          19|    58.46|     10.8|
+|                 34|    99.99|           9|    83.88|    34.99|
+|                 35|    79.99|           9|    34.21|     9.99|
+|                 36|    24.99|          24|     19.2|    12.99|
+|                 37|    51.99|          24|    36.41|     4.99|
+|                 38|    99.95|          14|    46.34|    19.99|
+|                 39|    34.99|          12|    23.74|    19.99|
+|                 40|    24.99|          24|    24.99|    24.99|
+|                 41|    99.99|          37|    31.24|     9.59|
+|                 42|      0.0|           1|      0.0|      0.0|
+|                 43|     99.0|           1|     99.0|     99.0|
+|                 44|    99.98|          15|    62.19|    21.99|
+|                 45|    99.99|           7|    55.42|    27.99|
+|                 46|    49.98|           9|    34.65|    19.98|
+|                 47|    99.95|          14|    44.63|    21.99|
+|                 48|    49.98|           7|     35.7|    19.98|
+|                 49|    99.99|          13|    74.22|    19.98|
+|                 50|     60.0|          14|    53.71|     34.0|
++-------------------+---------+------------+---------+---------+
+
+
+>>> sqlcxt = SQLContext(sc)
+>>> sqlcxt.setConf("spark.sql.avro.compression.codec", "snappy")
+>>> sqlcxt.setConf("spark.sql.shuffle.partitions","10")
+>>> pricePerCategory.write.format("com.databricks.spark.avro").save("/user/cloudera/problem2/products/result-df")
+
+
+>>> pDF.registerTempTable("products")
+>>> sqlcxt.sql("select product_category_id, max(product_price) as Max_Price, count(distinct(product_id)) as tot_products, round(avg(product_price),2) as avg_price, min(product_price) as Min_Price from products  where product_price < 100 group by product_category_id")
+
+[(1, (2, 59.979999999999997)), (2, (2, 129.99000000000001)), (3, (2, 89.989999999999995)), (4, (2, 89.989999999999995)), (5, (2, 199.99000000000001))]
+>>> pDF = sc.textFile("/user/cloudera/problem2/products/part*").map(lambda x : x.split("|")).map(lambda x : (int(x[0]),(int(x[1]) , float(x[4]) ) )  ).aggregateByKey( (0,99.99) , lambda x,y : (x[0],x[1] if x[1] > y[1] else y[1])  , lambda x,y: (x[0],x[1] if x[1] > y[1] else y[1]  ) ).sortBy(lambda x: x[0], 'false')
+
+
+
+
+**********************************************
+
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table products --target-dir /user/cloudera/products1 --as-textfile --fields-terminated-by '|' --outdir javafiles
+
+[cloudera@quickstart ~]$ hadoop fs -ls /user/cloudera/products1
+Found 5 items
+-rw-r--r--   1 cloudera cloudera          0 2017-08-26 07:45 /user/cloudera/products1/_SUCCESS
+-rw-r--r--   1 cloudera cloudera      41419 2017-08-26 07:45 /user/cloudera/products1/part-m-00000
+-rw-r--r--   1 cloudera cloudera      43660 2017-08-26 07:45 /user/cloudera/products1/part-m-00001
+-rw-r--r--   1 cloudera cloudera      42195 2017-08-26 07:45 /user/cloudera/products1/part-m-00002
+-rw-r--r--   1 cloudera cloudera      46719 2017-08-26 07:45 /user/cloudera/products1/part-m-00003
+
+
+
+productsDF = sc.textFile("/user/cloudera/problem2/products1")
+
+>>> productsRDD = sc.textFile("/user/cloudera/problem2/products1")
+
+>>> p100RDD = productsRDD.map(lambda x: x.split("|")).filter(lambda x: float(x[4]) <100)
+
+>>> p100RDD.map(lambda x : (x[1], x[4])).groupByKey().map(lambda x: (x[0], sorted(x[1], key=lambda x: x, reverse=True)[0])).take(5)
+
+
+>>> totprodpercat = p100RDD.map(lambda x: (x[1],1)).reduceByKey(lambda x,y: x+y)
+>>> totprodpercat = p100RDD.map(lambda x: (int(x[1]),1)).reduceByKey(lambda x,y: x+y).sortByKey(1)
+
+*** sortByKey([ascending], [numTasks])
+
+>>> totpricepercat=p100RDD.map(lambda x : (int(x[1]), float(x[4]))).reduceByKey(lambda x,y : x+y)
+
+
+>>> avgprocepercat = totprodpercat.join(totpricepercat).map(lambda x: (x[0],float(x[1][1]/x[1][0]))).sortByKey(1)
+
+>>> for i in avgpricepercat.collect():  print(i) 
+
+(2, 66.806363636363642)
+(3, 55.730000000000004)
+(4, 55.887)
+(5, 57.989230769230772)
+(6, 43.936315789473689)
+(7, 47.488888888888894)
+(8, 41.673157894736846)
+(9, 67.168823529411767)
+(10, 78.482500000000002)
+(11, 76.989999999999995)
+(12, 58.703809523809525)
+(13, 42.250869565217393)
+(15, 39.952173913043481)
+(16, 55.759230769230768)
+(17, 35.823333333333338)
+(18, 58.491)
+(19, 79.897272727272721)
+(20, 81.219999999999999)
+(21, 59.382173913043474)
+(22, 69.289500000000004)
+(24, 58.61238095238096)
+(25, 59.842500000000008)
+(26, 41.664583333333333)
+(27, 44.164583333333333)
+(29, 60.725999999999999)
+(30, 95.420000000000002)
+(31, 88.561428571428564)
+(32, 48.990000000000002)
+(33, 58.461578947368423)
+(34, 83.878888888888881)
+(35, 34.212222222222223)
+(36, 19.198333333333338)
+(37, 36.406666666666673)
+(38, 46.339285714285715)
+(39, 23.740000000000006)
+(40, 24.990000000000006)
+(41, 31.236486486486491)
+(42, 0.0)
+(43, 99.0)
+(44, 62.189333333333337)
+(45, 55.418571428571433)
+(46, 34.651111111111113)
+(47, 44.630714285714291)
+(48, 35.697142857142858)
+(49, 74.216923076923081)
+(50, 53.714285714285715)
+(51, 40.993000000000009)
+(52, 28.736315789473686)
+(53, 91.239999999999995)
+(54, 61.434444444444438)
+(55, 31.498333333333335)
+(56, 60.49818181818182)
+(57, 59.160000000000004)
+(58, 43.692307692307693)
+(59, 38.597000000000001)
+
+>>> avgpricepercat=p100RDD.map(lambda x : (int(x[1]), float(x[4]))).combineByKey(lambda x: (x,1), lambda acc, val : (acc[0]+val, acc[1]+1), lambda acc, val : (acc[0]+val[0], acc[1]+val[1])).sortByKey(1)
+>>> for i in avgpricepercat.collect():  print(i)     
+
+(2, 66.806363636363642)
+(3, 55.730000000000004)
+(4, 55.887)
+(5, 57.989230769230772)
+(6, 43.936315789473689)
+(7, 47.488888888888894)
+(8, 41.673157894736846)
+(9, 67.168823529411767)
+(10, 78.482500000000002)
+(11, 76.989999999999995)
+(12, 58.703809523809525)
+(13, 42.250869565217393)
+(15, 39.952173913043481)
+(16, 55.759230769230768)
+(17, 35.823333333333338)
+(18, 58.491)
+(19, 79.897272727272721)
+(20, 81.219999999999999)
+(21, 59.382173913043474)
+(22, 69.289500000000004)
+(24, 58.61238095238096)
+(25, 59.842500000000008)
+(26, 41.664583333333333)
+(27, 44.164583333333333)
+(29, 60.725999999999999)
+(30, 95.420000000000002)
+(31, 88.561428571428564)
+(32, 48.990000000000002)
+(33, 58.461578947368423)
+(34, 83.878888888888881)
+(35, 34.212222222222223)
+(36, 19.198333333333338)
+(37, 36.406666666666673)
+(38, 46.339285714285715)
+(39, 23.740000000000006)
+(40, 24.990000000000006)
+(41, 31.236486486486491)
+(42, 0.0)
+(43, 99.0)
+(44, 62.189333333333337)
+(45, 55.418571428571433)
+(46, 34.651111111111113)
+(47, 44.630714285714291)
+(48, 35.697142857142858)
+(49, 74.216923076923081)
+(50, 53.714285714285715)
+(51, 40.993000000000009)
+(52, 28.736315789473686)
+(53, 91.239999999999995)
+(54, 61.434444444444438)
+(55, 31.498333333333335)
+(56, 60.49818181818182)
+(57, 59.160000000000004)
+(58, 43.692307692307693)
+(59, 38.597000000000001)
+>>>
+
+>>> minpricepercat = p100RDD.map(lambda x : (int(x[1]), float(x[4]))).reduceByKey(lambda x,y: x if x <=y else y).sortByKey(1)
+>>> for i in minprocepercat.collect():  print(i)     
+
+(2, 29.969999999999999)
+(3, 0.0)
+(4, 21.989999999999998)
+(5, 14.0)
+(6, 14.0)
+(7, 14.0)
+(8, 21.989999999999998)
+(9, 28.0)
+(10, 34.990000000000002)
+(11, 34.990000000000002)
+(12, 16.989999999999998)
+(13, 21.989999999999998)
+(15, 5.0)
+(16, 27.989999999999998)
+(17, 19.989999999999998)
+(18, 0.0)
+(19, 0.0)
+(20, 22.0)
+(21, 8.0)
+(22, 21.989999999999998)
+(24, 0.0)
+(25, 0.0)
+(26, 18.0)
+(27, 18.0)
+(29, 4.9900000000000002)
+(30, 68.0)
+(31, 79.989999999999995)
+(32, 19.989999999999998)
+(33, 10.800000000000001)
+(34, 34.990000000000002)
+(35, 9.9900000000000002)
+(36, 12.99)
+(37, 4.9900000000000002)
+(38, 19.989999999999998)
+(39, 19.989999999999998)
+(40, 24.989999999999998)
+(41, 9.5899999999999999)
+(42, 0.0)
+(43, 99.0)
+(44, 21.989999999999998)
+(45, 27.989999999999998)
+(46, 19.98)
+(47, 21.989999999999998)
+(48, 19.98)
+(49, 19.98)
+(50, 34.0)
+(51, 28.0)
+(52, 10.0)
+(53, 69.989999999999995)
+(54, 34.990000000000002)
+(55, 9.9900000000000002)
+(56, 9.9900000000000002)
+(57, 0.0)
+(58, 22.0)
+(59, 28.0)
+>>>
+
+>>> minpricepercat = p100RDD.map(lambda x : (int(x[1]), float(x[4]))).combineByKey(lambda x: x, lambda acc, val:  acc if acc <= val else val, lambda acc, val: acc if acc <= val else val).sortByKey(1)
+
+>>> for i in minprocepercat.collect():  print(i) 
+
+(2, 29.969999999999999)
+(3, 0.0)
+(4, 21.989999999999998)
+(5, 14.0)
+(6, 14.0)
+(7, 14.0)
+(8, 21.989999999999998)
+(9, 28.0)
+(10, 34.990000000000002)
+(11, 34.990000000000002)
+(12, 16.989999999999998)
+(13, 21.989999999999998)
+(15, 5.0)
+(16, 27.989999999999998)
+(17, 19.989999999999998)
+(18, 0.0)
+(19, 0.0)
+(20, 22.0)
+(21, 8.0)
+(22, 21.989999999999998)
+(24, 0.0)
+(25, 0.0)
+(26, 18.0)
+(27, 18.0)
+(29, 4.9900000000000002)
+(30, 68.0)
+(31, 79.989999999999995)
+(32, 19.989999999999998)
+(33, 10.800000000000001)
+(34, 34.990000000000002)
+(35, 9.9900000000000002)
+(36, 12.99)
+(37, 4.9900000000000002)
+(38, 19.989999999999998)
+(39, 19.989999999999998)
+(40, 24.989999999999998)
+(41, 9.5899999999999999)
+(42, 0.0)
+(43, 99.0)
+(44, 21.989999999999998)
+(45, 27.989999999999998)
+(46, 19.98)
+(47, 21.989999999999998)
+(48, 19.98)
+(49, 19.98)
+(50, 34.0)
+(51, 28.0)
+(52, 10.0)
+(53, 69.989999999999995)
+(54, 34.990000000000002)
+(55, 9.9900000000000002)
+(56, 9.9900000000000002)
+(57, 0.0)
+(58, 22.0)
+(59, 28.0)
+>>>

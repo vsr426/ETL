@@ -1,0 +1,25 @@
+*****Sqoop *****
+sqoop list-databases --connect "jdbc:mysql://quickstart.cloudera:3306" --username retail_dba --password cloudera
+sqoop list-tables --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" -username retail_dba --password cloudera
+
+ sqoop eval --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --query "select count(1) as customer_count  from customers"
+ 
+ 
+sqoop import-all-tables --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera -m 2 --as-avrodatafile --warehouse-dir "/user/hive/warehouse/retail_stage.db"
+
+sqoop import-all-tables --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera -m 2 --as-textfile --warehouse-dir "/user/hive/warehouse/retail_stage.db"
+
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --table departments --as-textfile --target-dir /user/cloudera/departments
+
+CREATE EXTERNAL TABLE departments ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe' STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat' OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat' LOCATION 'hdfs:///user/cloudera/departments' TBLPROPERTIES ('avro.schema.url'='hdfs://quickstart.cloudera/user/cloudera/javafiles/departments.avsc')
+
+
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --query 'select customer_id, customer_fname,customer_lname, customer_city from customers where $CONDITIONS' --target-dir /user/cloudera/sqoop-imports/ -m 4 --split-by customer_id --boundary-query "select min(customer_id), max(customer_id) from customers" --append
+
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --hive-import --hive-table customers --outdir javafiles --table customers
+sqoop import --connect "jdbc:mysql://quickstart.cloudera:3306/retail_db" --username retail_dba --password cloudera --hive-import --hive-table customers --outdir javafiles --table customers --fields-terminated-by '$' --lines-terminated-by '\n';
+
+
+
+sqoop export --connect "jdbc:mysql://quickstart.cloudera:3306/retail_rpt_db" --username retail_dba --password cloudera --export-dir 'hdfs://quickstart.cloudera:8020/user/hive/warehouse/customers' --input-fields-terminated-by '~' --input-lines-terminated-by '\n' --table customers_exported --num-mappers 2 --outdir javafiles
+ sqoop export --connect "jdbc:mysql://quickstart.cloudera:3306/retail_rpt_db" --username retail_dba --password cloudera --export-dir 'hdfs://quickstart.cloudera:8020/user/hive/warehouse/customers' --input-fields-terminated-by '~' --input-lines-terminated-by '\n' --table customers_exported --num-mappers 2 --outdir javafiles --update-key customer_id --update-mode allowinsert

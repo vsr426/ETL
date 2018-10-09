@@ -1,0 +1,277 @@
+sqoop import --connect jdbc:mysql://quickstart.cloudera/retail_db --username retail_dba --password cloudera --table orders --target-dir /user/cloudera/problem1/orders --as-avrodatafile --compress --compression-codec org.apache.hadoop.io.compress.SnappyCodec --outdir javafiles
+
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table order_items --target-dir /user/cloudera/problem1/order-items -- as-avrodatafile --compress --compression-codec org.apache.hadoop.io.compress.SnappyCodec --outdir javafiles
+
+
+Pyspark:
+
+sqlcxt= SQLContext(sc)
+oDF = sqlcxt.read.format("com.databricks.spark.avro").load("/user/cloudera/problem1/orders")
+oiDF=sqlcxt.read.format("com.databricks.spark.avro").load("/user/cloudera/problem1/orders-items")
+ooiDF = oDF.join(oiDF, oDF.order_id == oiDF.order_item_order_id)
+ooiDF = oDF.join(oiDF, oDF.order_id == oiDF.order_item_order_id).select(oDF.order_date, oDF.order_status, oDF.order_id, oiDF.order_item_subtotal)
+
+from  pyspark.sql.functions import *
+
+ooiDF = oDF.join(oiDF, oDF.order_id == oiDF.order_item_order_id).select(from_unixtime(oDF.order_date/1000), oDF.order_status, oDF.order_id, oiDF.order_item_subtotal)
+ooiDF = oDF.join(oiDF, oDF.order_id == oiDF.order_item_order_id).select(to_date(from_unixtime(oDF.order_date/1000)).alias("Order_Date"), oDF.order_status, oDF.order_id, oiDF.order_item_subtotal)
+
+sqlcxt.setConf("spark.sql.shuffle.partitions" , "10")  
+totDF = ooiDF.groupBy(ooiDF.Order_Date,ooiDF.order_status).agg(countDistinct(ooiDF.order_id).alias("total_orders"),round(sum(ooiDF.order_item_subtotal),2).alias("total_amount")).orderBy(col("Order_Date").desc(),col("order_status"), col("total_orders"), col("total_amount").desc())
+totDF.show()
+
++----------+---------------+------------+------------+
+|Order_Date|   order_status|total_orders|total_amount|
++----------+---------------+------------+------------+
+|2014-07-24|       CANCELED|           2|     1254.92|
+|2014-07-24|         CLOSED|          26|    16333.16|
+|2014-07-24|       COMPLETE|          55|    34552.03|
+|2014-07-24|        ON_HOLD|           4|     1709.74|
+|2014-07-24| PAYMENT_REVIEW|           1|      499.95|
+|2014-07-24|        PENDING|          22|    12729.49|
+|2014-07-24|PENDING_PAYMENT|          34|     17680.7|
+|2014-07-24|     PROCESSING|          17|     9964.74|
+|2014-07-24|SUSPECTED_FRAUD|           4|     2351.61|
+|2014-07-23|       CANCELED|          10|     5777.33|
+|2014-07-23|         CLOSED|          18|    13312.72|
+|2014-07-23|       COMPLETE|          40|    25482.51|
+|2014-07-23|        ON_HOLD|           6|     4514.46|
+|2014-07-23| PAYMENT_REVIEW|           2|     1699.82|
+|2014-07-23|        PENDING|          11|     6161.37|
+|2014-07-23|PENDING_PAYMENT|          30|    19279.81|
+|2014-07-23|     PROCESSING|          15|     7962.79|
+|2014-07-23|SUSPECTED_FRAUD|           6|     3799.57|
+|2014-07-22|       CANCELED|           4|     3209.73|
+|2014-07-22|         CLOSED|          20|    12688.79|
++----------+---------------+------------+------------+
+
+sqltotDF = sqlcxt.sql("select Order_Date, order_status, count(distinct(order_id)) as total_orders , sum(order_item_subtotal) as total_amount  from order_joined group by Order_Date, order_status order by Order_Date desc, order_status,  total_orders  , total_amount desc")
+sqltotDF = sqlcxt.sql("select Order_Date, order_status, count(distinct(order_id)) as total_orders , round(sum(order_item_subtotal), 2) as total_amount  from order_joined group by Order_Date, order_status order by Order_Date desc, order_status,  total_orders  , total_amount desc")
+sqltotDF.show()
++----------+---------------+------------+------------+
+|Order_Date|   order_status|total_orders|total_amount|
++----------+---------------+------------+------------+
+|2014-07-24|       CANCELED|           2|     1254.92|
+|2014-07-24|         CLOSED|          26|    16333.16|
+|2014-07-24|       COMPLETE|          55|    34552.03|
+|2014-07-24|        ON_HOLD|           4|     1709.74|
+|2014-07-24| PAYMENT_REVIEW|           1|      499.95|
+|2014-07-24|        PENDING|          22|    12729.49|
+|2014-07-24|PENDING_PAYMENT|          34|     17680.7|
+|2014-07-24|     PROCESSING|          17|     9964.74|
+|2014-07-24|SUSPECTED_FRAUD|           4|     2351.61|
+|2014-07-23|       CANCELED|          10|     5777.33|
+|2014-07-23|         CLOSED|          18|    13312.72|
+|2014-07-23|       COMPLETE|          40|    25482.51|
+|2014-07-23|        ON_HOLD|           6|     4514.46|
+|2014-07-23| PAYMENT_REVIEW|           2|     1699.82|
+|2014-07-23|        PENDING|          11|     6161.37|
+|2014-07-23|PENDING_PAYMENT|          30|    19279.81|
+|2014-07-23|     PROCESSING|          15|     7962.79|
+|2014-07-23|SUSPECTED_FRAUD|           6|     3799.57|
+|2014-07-22|       CANCELED|           4|     3209.73|
+|2014-07-22|         CLOSED|          20|    12688.79|
++----------+---------------+------------+------------+
+
+Using combineByKey():
+ooiRDD = ooiDF.map(lambda x : ((str(x[0]),str(x[1])),(int(x[2]),float(x[3])))).combineByKey(lambda x : ([x[0]],x[1]), lambda acc, val : ( acc[0]+[val[0]] , acc[1] + val[1]) , lambda acc, val : (acc[0] + val[0] , acc[1] + val[1]) ).map(lambda x: (x[0][0] , x[0][1], len(set(x[1][0])),x[1][1])).toDF().orderBy(col("_1").desc(), col("_2"), col("_3"), col("_4").desc())
+Row(_1=u'2014-07-24', _2=u'CANCELED', _3=2, _4=1254.9200382232666)
+Row(_1=u'2014-07-24', _2=u'CLOSED', _3=26, _4=16333.160339355469)
+Row(_1=u'2014-07-24', _2=u'COMPLETE', _3=55, _4=34552.03063583374)
+Row(_1=u'2014-07-24', _2=u'ON_HOLD', _3=4, _4=1709.7400207519531)
+Row(_1=u'2014-07-24', _2=u'PAYMENT_REVIEW', _3=1, _4=499.95001220703125)
+Row(_1=u'2014-07-24', _2=u'PENDING', _3=22, _4=12729.490217208862)
+Row(_1=u'2014-07-24', _2=u'PENDING_PAYMENT', _3=34, _4=17680.700359344482)
+Row(_1=u'2014-07-24', _2=u'PROCESSING', _3=17, _4=9964.7401905059814)
+Row(_1=u'2014-07-24', _2=u'SUSPECTED_FRAUD', _3=4, _4=2351.6100215911865)
+Row(_1=u'2014-07-23', _2=u'CANCELED', _3=10, _4=5777.3301124572754)
+Row(_1=u'2014-07-23', _2=u'CLOSED', _3=18, _4=13312.720283508301)
+Row(_1=u'2014-07-23', _2=u'COMPLETE', _3=40, _4=25482.510496139526)
+Row(_1=u'2014-07-23', _2=u'ON_HOLD', _3=6, _4=4514.4600601196289)
+Row(_1=u'2014-07-23', _2=u'PAYMENT_REVIEW', _3=2, _4=1699.8200302124023)
+Row(_1=u'2014-07-23', _2=u'PENDING', _3=11, _4=6161.3701171875)
+Row(_1=u'2014-07-23', _2=u'PENDING_PAYMENT', _3=30, _4=19279.810424804688)
+Row(_1=u'2014-07-23', _2=u'PROCESSING', _3=15, _4=7962.7901306152344)
+Row(_1=u'2014-07-23', _2=u'SUSPECTED_FRAUD', _3=6, _4=3799.5700721740723)
+Row(_1=u'2014-07-22', _2=u'CANCELED', _3=4, _4=3209.730094909668)
+Row(_1=u'2014-07-22', _2=u'CLOSED', _3=20, _4=12688.79024887085)
+
+
+
+ sqlcxt.setConf("spark.sql.parquet.compression.codec","gzip")
+ totDF.write.parquet("/user/cloudera/problem1/result4a-gzip")
+ sqltotDF.write.parquet("/user/cloudera/problem1/result4b-gzip")
+ooiRDD.write.parquet("/user/cloudera/problem1/result4c-gzip")
+
+
+
+
+mysql -h quickstart.cloudera -u retail_dba -p
+
+ use retail_db
+ 
+ create table result(order_date varchar(255) not null,order_status varchar(255) not null, total_orders int, total_amount numeric, constraint pk_order_result primary key (order_date,order_status));
+sqoop export -Dmapreduce.job.user.classpath.first=true --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table result --export-dir "/user/cloudera/problem1/result4a-gzip"  --outdir javafiles
+
+
+https://community.hortonworks.com/questions/60890/sqoop-import-to-avro-failing-which-jars-to-be-used.html
+
+This is actually a known issue, and there is a Jira for a documentation bug to get this fixed in a later HDP release. Sqoop uses 1.8.0 of avro and there are other Hadoop components using 1.7.5 or 1.7.4 avro.
+
+Please add the following property after 'import': -Dmapreduce.job.user.classpath.first=true
+
+Example:
+
+sqoop import -Dmapreduce.job.user.classpath.first=true -Dhadoop.security.credential.provider.path=jceks://x.jceks --connect jdbc:db2://xxx:60000/x2 --username xx -password-alias xx --as-avrodatafile --target-dir xx/data/test --fields-terminated-by '\001' --table xx -m 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+******************************************
+1. Using sqoop, import orders table into hdfs to folders /user/cloudera/problem1/orders. File should be loaded as Avro File and use snappy compression
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table orders --outdir javafiles --as-avrodatafile --compress --compression-codec org.apache.hadoop.io.compress.SnappyCodec --target-dir /user/cloudera/problem1/orders1
+[cloudera@quickstart ~]$ hadoop fs -ls /user/cloudera/problem1/orders1
+Found 5 items
+-rw-r--r--   1 cloudera cloudera          0 2017-08-24 17:42 /user/cloudera/problem1/orders1/_SUCCESS
+-rw-r--r--   1 cloudera cloudera     164090 2017-08-24 17:42 /user/cloudera/problem1/orders1/part-m-00000.avro
+-rw-r--r--   1 cloudera cloudera     164157 2017-08-24 17:42 /user/cloudera/problem1/orders1/part-m-00001.avro
+-rw-r--r--   1 cloudera cloudera     164278 2017-08-24 17:42 /user/cloudera/problem1/orders1/part-m-00002.avro
+-rw-r--r--   1 cloudera cloudera     169339 2017-08-24 17:42 /user/cloudera/problem1/orders1/part-m-00003.avro
+
+2.Using sqoop, import order_items  table into hdfs to folders /user/cloudera/problem1/order-items. Files should be loaded as avro file and use snappy compression
+
+[cloudera@quickstart ~]$ sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table order_items --outdir javafiles --as-avrodatafile --target-dir /user/cloudera/problem1/order-items1 --compress --compression-codec org.apache.hadoop.io.compress.SnappyCodec
+
+[cloudera@quickstart ~]$ hadoop fs -ls /user/cloudera/problem1/order-items1
+Found 5 items
+-rw-r--r--   1 cloudera cloudera          0 2017-08-24 17:49 /user/cloudera/problem1/order-items1/_SUCCESS
+-rw-r--r--   1 cloudera cloudera     381708 2017-08-24 17:49 /user/cloudera/problem1/order-items1/part-m-00000.avro
+-rw-r--r--   1 cloudera cloudera     385380 2017-08-24 17:49 /user/cloudera/problem1/order-items1/part-m-00001.avro
+-rw-r--r--   1 cloudera cloudera     385026 2017-08-24 17:49 /user/cloudera/problem1/order-items1/part-m-00002.avro
+-rw-r--r--   1 cloudera cloudera     376923 2017-08-24 17:49 /user/cloudera/problem1/order-items1/part-m-00003.avro
+
+
+3.Using Spark Scala load data at /user/cloudera/problem1/orders and /user/cloudera/problem1/orders-items items as dataframes. 
+>>> ssc = SQLContext(sc)
+>>> ssc.setConf("spark.sql.shuffle.partitions", "4")
+>>> from pyspark.sql.functions import *
+>>> from pyspark import Row
+>>> oDF = ssc.read.format("com.databricks.spark.avro").load("/user/cloudera/problem1/orders1")
+>>> oDF
+DataFrame[order_id: int, order_date: bigint, order_customer_id: int, order_status: string]
+
+>>> oiDF = ssc.read.format("com.databricks.spark.avro").load("/user/cloudera/problem1/order-items1")
+>>> oiDF
+DataFrame[order_item_id: int, order_item_order_id: int, order_item_product_id: int, order_item_quantity: int, order_item_subtotal: float, order_item_product_price: float]
+
+4.Expected Intermediate Result: Order_Date , Order_status, total_orders, total_amount. In plain english, please find total orders and total amount per status per day. The result should be sorted by order date in descending, order status in ascending and total amount in descending and total orders in ascending. Aggregation should be done using below methods. However, sorting can be done using a dataframe or RDD. Perform aggregation in each of the following ways
+a). Just by using Data Frames API - here order_date should be YYYY-MM-DD format
+b). Using Spark SQL  - here order_date should be YYYY-MM-DD format
+c). By using combineByKey function on RDDS -- No need of formatting order_date or total_amount
+
+>>> ooiDF = oDF.join(oiDF, oDF.order_id == oiDF.order_item_order_id).select(to_date(from_unixtime(oDF.order_date/1000)).alias("order_date"), oDF.order_status, oDF.order_id, oiDF.order_item_subtotal)
+
+>>> ooiDF
+DataFrame[order_date: bigint, order_status: string, order_id: int, order_item_subtotal: float]
+
+>>> ooiDF.show(2)
++----------+---------------+--------+-------------------+
+|order_date|   order_status|order_id|order_item_subtotal|
++----------+---------------+--------+-------------------+
+|2013-07-25|         CLOSED|       1|             299.98|
+|2013-07-25|PENDING_PAYMENT|       2|             199.99|
++----------+---------------+--------+-------------------+
+only showing top 2 rows
+
+
+>>> ooiaggDF = ooiDF.groupBy(ooiDF.order_date, ooiDF.order_status).agg(countDistinct(ooiDF.order_id).alias("total_orders"), sum(ooiDF.order_item_subtotal).alias("total_amount"))
+>>> ooiaggDF.show(2)
++----------+------------+------------+------------------+
+|order_date|order_status|total_orders|      total_amount|
++----------+------------+------------+------------------+
+|2013-07-25|  PROCESSING|          15|10285.640186309814|
+|2013-07-27|    COMPLETE|          55|33156.210554122925|
++----------+------------+------------+------------------+
+
+>>> ooiaggDF = ooiDF.groupBy(ooiDF.order_date, ooiDF.order_status).agg(countDistinct(ooiDF.order_id).alias("total_orders"), round(sum(ooiDF.order_item_subtotal),2).alias("total_amount"))
+>>> ooiaggDF.show(2)
++----------+------------+------------+------------+
+|order_date|order_status|total_orders|total_amount|
++----------+------------+------------+------------+
+|2013-07-25|  PROCESSING|          15|    10285.64|
+|2013-07-27|    COMPLETE|          55|    33156.21|
++----------+------------+------------+------------+
+
+>>> ooiaggDF = ooiDF.groupBy(ooiDF.order_date, ooiDF.order_status).agg(countDistinct(ooiDF.order_id).alias("total_orders"), round(sum(ooiDF.order_item_subtotal),2).alias("total_amount")).orderBy(ooiDF.order_date.desc(), ooiDF.order_status , col("total_amount").desc(), col("total_orders"))
++----------+---------------+------------+------------+
+|order_date|   order_status|total_orders|total_amount|
++----------+---------------+------------+------------+
+|2014-07-24|       CANCELED|           2|     1254.92|
+|2014-07-24|         CLOSED|          26|    16333.16|
+|2014-07-24|       COMPLETE|          55|    34552.03|
+|2014-07-24|        ON_HOLD|           4|     1709.74|
+|2014-07-24| PAYMENT_REVIEW|           1|      499.95|
+|2014-07-24|        PENDING|          22|    12729.49|
+|2014-07-24|PENDING_PAYMENT|          34|     17680.7|
+|2014-07-24|     PROCESSING|          17|     9964.74|
+|2014-07-24|SUSPECTED_FRAUD|           4|     2351.61|
+|2014-07-23|       CANCELED|          10|     5777.33|
+|2014-07-23|         CLOSED|          18|    13312.72|
+|2014-07-23|       COMPLETE|          40|    25482.51|
+|2014-07-23|        ON_HOLD|           6|     4514.46|
+|2014-07-23| PAYMENT_REVIEW|           2|     1699.82|
+|2014-07-23|        PENDING|          11|     6161.37|
+|2014-07-23|PENDING_PAYMENT|          30|    19279.81|
+|2014-07-23|     PROCESSING|          15|     7962.79|
+|2014-07-23|SUSPECTED_FRAUD|           6|     3799.57|
+|2014-07-22|       CANCELED|           4|     3209.73|
+|2014-07-22|         CLOSED|          20|    12688.79|
++----------+---------------+------------+------------+
+only showing top 20 rows
+
+>>> osqlDF = ssc.sql("select to_date(from_unixtime(o.order_date/1000)) as order_date, o.order_status, count(distinct(o.order_id)) as tot_orders, round(sum(oi.order_item_subtotal),2) as tot_amount from orders o join order_items oi on o.order_id = oi.order_item_order_id group by o.order_date, o.order_status order by o.order_date desc, o.order_status, tot_orders , tot_amount desc")
+
+>>> osqlDF
+DataFrame[order_date: date, order_status: string, tot_orders: bigint, tot_amount: double]
+>>> osqlDF.show()
++----------+---------------+----------+----------+
+|order_date|   order_status|tot_orders|tot_amount|
++----------+---------------+----------+----------+
+|2014-07-24|       CANCELED|         2|   1254.92|
+|2014-07-24|         CLOSED|        26|  16333.16|
+|2014-07-24|       COMPLETE|        55|  34552.03|
+|2014-07-24|        ON_HOLD|         4|   1709.74|
+|2014-07-24| PAYMENT_REVIEW|         1|    499.95|
+|2014-07-24|        PENDING|        22|  12729.49|
+|2014-07-24|PENDING_PAYMENT|        34|   17680.7|
+|2014-07-24|     PROCESSING|        17|   9964.74|
+|2014-07-24|SUSPECTED_FRAUD|         4|   2351.61|
+|2014-07-23|       CANCELED|        10|   5777.33|
+|2014-07-23|         CLOSED|        18|  13312.72|
+|2014-07-23|       COMPLETE|        40|  25482.51|
+|2014-07-23|        ON_HOLD|         6|   4514.46|
+|2014-07-23| PAYMENT_REVIEW|         2|   1699.82|
+|2014-07-23|        PENDING|        11|   6161.37|
+|2014-07-23|PENDING_PAYMENT|        30|  19279.81|
+|2014-07-23|     PROCESSING|        15|   7962.79|
+|2014-07-23|SUSPECTED_FRAUD|         6|   3799.57|
+|2014-07-22|       CANCELED|         4|   3209.73|
+|2014-07-22|         CLOSED|        20|  12688.79|
++----------+---------------+----------+----------+
+only showing top 20 rows
+
+
+>>> oRDD = oDF.map(lambda x : (x[0],x))
+>>> oiRDD = oiDF.map( lambda x : (x[1],float(x[4])))
+>>> ooiRDD = oRDD.join(oiRDD)

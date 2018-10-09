@@ -1,0 +1,70 @@
+Problem Scenario 4
+PLEASE READ THE INTRODUCTION TO THIS SERIES. CLICK ON HOME LINK AND READ THE INTRO BEFORE ATTEMPTING TO SOLVE THE PROBLEMS
+
+Video walk-through of the solution to this problem can be found here [Click here]
+
+Click here for the video version of this series. This takes you to the youtube playlist of videos. 
+
+In this problem, we will focus on conversion between different file formats using spark or hive. This is a very import examination topic. I recommend that you master the data file conversion techniques and understand the limitations. You should have an alternate method of accomplishing a solution to the problem in case your primary method fails for any unknown reason. For example, if saving the result as a text file with snappy compression fails while using spark then you should be able to accomplish the same thing using Hive. In this blog\video I am going to walk you through some scenarios that cover alternative ways of dealing with same problem.    
+
+Problem 4:
+	Import orders table from mysql as text file to the destination /user/cloudera/problem5/text. Fields should be terminated by a tab character ("\t") character and lines should be terminated by new line character ("\n"). 
+	Import orders table from mysql  into hdfs to the destination /user/cloudera/problem5/avro. File should be stored as avro file.
+	Import orders table from mysql  into hdfs  to folders /user/cloudera/problem5/parquet. File should be stored as parquet file.
+	Transform/Convert data-files at /user/cloudera/problem5/avro and store the converted file at the following locations and file formats
+		save the data to hdfs using snappy compression as parquet file at /user/cloudera/problem5/parquet-snappy-compress
+		save the data to hdfs using gzip compression as text file at /user/cloudera/problem5/text-gzip-compress
+		save the data to hdfs using no compression as sequence file at /user/cloudera/problem5/sequence
+		save the data to hdfs using snappy compression as text file at /user/cloudera/problem5/text-snappy-compress
+	Transform/Convert data-files at /user/cloudera/problem5/parquet-snappy-compress and store the converted file at the following locations and file formats
+		save the data to hdfs using no compression as parquet file at /user/cloudera/problem5/parquet-no-compress
+		save the data to hdfs using snappy compression as avro file at /user/cloudera/problem5/avro-snappy
+	Transform/Convert data-files at /user/cloudera/problem5/avro-snappy and store the converted file at the following locations and file formats
+		save the data to hdfs using no compression as json file at /user/cloudera/problem5/json-no-compress
+		save the data to hdfs using gzip compression as json file at /user/cloudera/problem5/json-gzip
+	Transform/Convert data-files at  /user/cloudera/problem5/json-gzip and store the converted file at the following locations and file formats
+		save the data to as comma separated text using gzip compression at   /user/cloudera/problem5/csv-gzip
+	Using spark access data at /user/cloudera/problem5/sequence and stored it back to hdfs using no compression as ORC file to HDFS to destination /user/cloudera/problem5/orc 
+	
+	
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera -table orders --target-dir '/user/cloudera/problem5/text' --fields-terminated-by '\t' --lines-terminated-by '\n'
+sqoop import --connect jdbc:mysql://quickstart.cloudera:3306/retail_db --username retail_dba --password cloudera --table orders --target-dir /user/cloudera/problem5/avro --as-avrodatafile
+sqoop import --connect "jdbc:mysql://quickstart:3306/retail_db" --username retail_dba --password cloudera --table orders --target-dir /user/cloudera/problem5/parquet --as-avrodatafile
+
+>>> sqlc = SQLContext(sc)
+>>> sqlc.setConf("spark.sql.parquet.compression.codec","snappy")
+>>> oDF=sqlc.read.format("com.databricks.spark.avro").load("/user/cloudera/problem5/avro")
+>>> oDF
+DataFrame[order_id: int, order_date: bigint, order_customer_id: int, order_status: string]
+>>> oDF.write.parquet("/user/cloudera/problem5/parquet-snappy-compress")
+
+>>> ordersText=sc.textFile("/user/cloudera/problem5/text")
+>>> ordersText.saveAsTextFile("/user/cloudera/problem5/text-gzip-compress", compressionCodecClass="org.apache.hadoop.io.compress.GzipCodec")
+>>> ordersText.map(lambda x: (None,x)).saveAsSequenceFile("/user/cloudera/problem5/sequence")
+>>> oDF.saveAsTextFile("/user/cloudera/problem5/text-snappy-compress", compressionCodecClass="org.apache.hadoop.io.compress.SnappyCodec")
+
+
+
+>>> oparquet=sqlc.read.parquet("/user/cloudera/problem5/parquet-snappy-compress")
+>>> sqlc.setConf("spark.sql.parquet.compression.codec","uncompressed")
+>>> oparquet.write.parquet("/user/cloudera/problem5/parquet-no-compress")
+
+>>> sqlc.setConf("spark.sql.avro.compression.codec","snappy")
+>>> oparquet.write.format("com.databricks.spark.avro").save("/user/cloudera/problem5/avro-snappy")
+
+>>> oavro=sqlc.read.format("com.databricks.spark.avro").load("/user/cloudera/problem5/avro-snappy")
+>>> oavro.toJSON().saveAsTextFile("/user/cloudera/problem5/json-no-compress")
+>>> oavro.toJSON().saveAsTextFile("/user/cloudera/problem5/json-gzip", compressionCodecClass="org.apache.hadoop.io.compress.GzipCodec")
+
+
+>>> ojson=sqlc.read.json("/user/cloudera/problem5/json-gzip")
+>>> ojson.map(lambda x: str(x[0])+','+str(x[1])+','+str(x[2])+','+str(x[3])).take(5)
+>>> ojson.map(lambda x: str(x[0])+','+str(x[1])+','+str(x[2])+','+str(x[3])).saveAsTextFile("/user/cloudera/problem5/csv-gzip", compressionCodecClass="org.apache.hadoop.io.compress.GzipCodec")
+
+
+>>> osequence= sc.sequenceFile("/user/cloudera/problem5/sequence")
+>>> osequence= sc.sequenceFile("/user/cloudera/problem5/sequence",keyClass=None, valueClass="org.apache.hadoop.io.Text")
+>>> oRDD=osequence.map(lambda x: x[1]).map(lambda x: x.split("\t")).map(lambda x : Row(oid=int(x[0]), odate=str(x[1]), olid=int(x[2]), osts=str(x[3]))).take(5)
+>>> o1DF=hc.createDataFrame(oRDD)
+>>> o1DF.write.orc("/user/cloudera/problem5/orc")
+
